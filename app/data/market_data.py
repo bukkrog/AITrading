@@ -62,15 +62,15 @@ def get_bars_df(session: Session, symbol: str) -> pd.DataFrame:
 
 
 def _norm_ts(ts) -> pd.Timestamp:
-    """Normalise a timestamp to midnight UTC for consistent daily-bar dedup.
+    """Normalise a timestamp to UTC for consistent dedup.
 
-    Bars come from SQLite (tz-naive) and feeds (tz-aware); normalising both to
-    a single canonical form keeps ``_store_bars`` idempotent (no duplicate rows,
-    no UNIQUE violations on re-fetch).
+    Bars come from SQLite (tz-naive) and feeds (tz-aware); converting both to
+    UTC keeps ``_store_bars`` dedup correct. The exact time is preserved (NOT
+    collapsed to midnight) so intraday bars — many per day — are all kept.
+    Daily bars already sit at 00:00 UTC, so they still dedup cleanly.
     """
     t = pd.Timestamp(ts)
-    t = t.tz_localize("UTC") if t.tzinfo is None else t.tz_convert("UTC")
-    return t.normalize()
+    return t.tz_localize("UTC") if t.tzinfo is None else t.tz_convert("UTC")
 
 
 def _store_bars(

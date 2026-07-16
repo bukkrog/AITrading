@@ -36,7 +36,7 @@ def test_saxo_live_refused_when_live_disabled(monkeypatch):
 def test_paper_buy_fills_and_updates_portfolio(session):
     pf = PortfolioEngine(session)
     start = pf.cash
-    engine = ExecutionEngine(session, pf, PaperBroker(commission_pct=0.0, slippage_bps=0.0))
+    engine = ExecutionEngine(session, pf, PaperBroker(commission_pct=0.0, slippage_bps=0.0, commission_per_trade=0.0))
 
     order = engine.submit(
         OrderRequest(symbol="NOVO", side=OrderSide.BUY, quantity=10), reference_price=100.0
@@ -61,7 +61,7 @@ def test_paper_slippage_and_commission_applied(session):
 
 def test_buy_then_sell_round_trip(session):
     pf = PortfolioEngine(session)
-    engine = ExecutionEngine(session, pf, PaperBroker(commission_pct=0.0, slippage_bps=0.0))
+    engine = ExecutionEngine(session, pf, PaperBroker(commission_pct=0.0, slippage_bps=0.0, commission_per_trade=0.0))
     engine.submit(OrderRequest(symbol="NOVO", side=OrderSide.BUY, quantity=10), 100.0)
     engine.submit(OrderRequest(symbol="NOVO", side=OrderSide.SELL, quantity=10), 120.0)
     assert pf.get_position("NOVO").quantity == 0

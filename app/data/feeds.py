@@ -51,7 +51,15 @@ def fetch_bars(symbol: str, *, days: int | None = None, source: str | None = Non
     try:
         import yfinance as yf
 
-        raw = yf.Ticker(symbol).history(period=f"{days}d", auto_adjust=True)
+        # Map the timeframe to a yfinance interval + a period it will serve.
+        hz = settings.market_horizon_minutes
+        interval, period = {
+            5: ("5m", "1mo"),
+            15: ("15m", "2mo"),
+            30: ("30m", "2mo"),
+            60: ("60m", "6mo"),
+        }.get(hz, ("1d", f"{days}d"))
+        raw = yf.Ticker(symbol).history(period=period, interval=interval, auto_adjust=True)
         if raw is None or raw.empty:
             logger.warning("yfinance returned no data for %s.", symbol)
             return pd.DataFrame()

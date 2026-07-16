@@ -199,6 +199,12 @@ export interface SettingsView {
   market_data_source: string;
   news_enabled: boolean;
   market_lookback_days: number;
+  market_horizon_minutes: number;
+  commission_per_trade: number;
+  commission_pct: number;
+  slippage_bps: number;
+  trade_cooldown_minutes: number;
+  min_trade_notional: number;
   discovery_enabled: boolean;
   discovery_top_n: number;
   discovery_candidates: string;

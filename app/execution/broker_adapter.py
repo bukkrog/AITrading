@@ -191,23 +191,25 @@ class SaxoBrokerAdapter(BrokerAdapter):
         last = (rows[0] or {}).get("LastTraded") if rows else None
         return float(last) if last else None
 
-    def bars(self, symbol: str, days: int = 365):
-        """Return daily OHLCV bars for ``symbol`` from Saxo's chart service.
+    def bars(self, symbol: str, days: int = 365, horizon: int | None = None):
+        """Return OHLCV bars for ``symbol`` from Saxo's chart service.
 
-        Uses ``GET /chart/v3/charts`` (Horizon=1440 minutes = daily); Count
-        alone returns the most-recent N samples. Stocks return
-        Open/High/Low/Close/Volume; FX returns bid/ask, which we average.
+        Uses ``GET /chart/v3/charts``; ``horizon`` is the bar size in minutes
+        (1440 = daily, 60 = hourly, …). Count alone returns the most-recent N
+        samples. Stocks return Open/High/Low/Close/Volume.
         """
         import pandas as pd
 
+        horizon = horizon or settings.market_horizon_minutes
         uic = self.resolve_uic(symbol)
-        count = min(max(days, 60), 1200)  # Saxo caps at 1200 datapoints
+        # ~300 bars is plenty for SMA50 + history at any timeframe (Saxo caps 1200).
+        count = 300 if horizon != 1440 else min(max(days, 60), 1200)
         data = self._get(
             "/chart/v3/charts",
             {
                 "Uic": uic,
                 "AssetType": "Stock",
-                "Horizon": 1440,
+                "Horizon": horizon,
                 "Count": count,
             },
         )

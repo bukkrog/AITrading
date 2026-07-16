@@ -12,15 +12,19 @@ This is the wiring the dashboard/API and the scheduler drive in paper mode.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.agents.execution_agent import ExecutionAgent
 from app.agents.news_agent import NewsAnalystAgent
 from app.agents.quant_agent import QuantAnalystAgent
 from app.agents.risk_agent import RiskManagerAgent
+from app.config import settings
 from app.core.enums import AuditCategory, OrderSide
 from app.data.market_data import get_bars_df
+from app.data.models import Order
 from app.execution.broker_adapter import build_broker
 from app.execution.execution_engine import ExecutionEngine
 from app.logging_config import get_logger
@@ -35,6 +39,21 @@ logger = get_logger(__name__)
 
 # Below this quant score an open long position is closed.
 EXIT_QUANT_SCORE = 50.0
+
+
+def _recently_traded(session: Session, symbol: str, minutes: int) -> bool:
+    """True if ``symbol`` had an order within the last ``minutes`` (churn guard)."""
+    if minutes <= 0:
+        return False
+    cutoff = datetime.now(timezone.utc) - timedelta(minutes=minutes)
+    last = session.scalar(
+        select(Order.ts).where(Order.symbol == symbol).order_by(Order.ts.desc()).limit(1)
+    )
+    if last is None:
+        return False
+    if last.tzinfo is None:
+        last = last.replace(tzinfo=timezone.utc)
+    return last >= cutoff
 
 
 @dataclass
@@ -157,11 +176,27 @@ def run_cycle(
         results.append(result)
 
         if result.approved and result.risk.approved_quantity > 0:
+            qty = result.risk.approved_quantity
+            notional = qty * prices[sym]
+            # Churn guards (cost-awareness): skip if traded too recently, or the
+            # trade is too small to be worth the commission.
+            if _recently_traded(session, sym, settings.trade_cooldown_minutes):
+                audit_log_service.record(
+                    session, AuditCategory.ORDER, "cooldown_skip", symbol=sym,
+                    message=f"Skipped {sym}: traded within {settings.trade_cooldown_minutes}min cooldown.",
+                )
+                continue
+            if settings.min_trade_notional > 0 and notional < settings.min_trade_notional:
+                audit_log_service.record(
+                    session, AuditCategory.ORDER, "min_notional_skip", symbol=sym,
+                    message=f"Skipped {sym}: notional {notional:.0f} < min {settings.min_trade_notional:.0f}.",
+                )
+                continue
             pipe.execution_agent.execute(
                 TradeProposal(
                     symbol=sym,
                     side=OrderSide.BUY,
-                    quantity=result.risk.approved_quantity,
+                    quantity=qty,
                     reference_price=prices[sym],
                     stop_price=result.risk.stop_price,
                     signal_id=result.signal_id,

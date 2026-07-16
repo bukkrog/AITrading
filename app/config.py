@@ -142,6 +142,24 @@ class Settings(BaseSettings):
     market_data_source: Literal["synthetic", "yfinance", "saxo"] = "saxo"
     news_enabled: bool = True  # pull real headlines when source=yfinance
     market_lookback_days: int = 365
+    # Bar timeframe in minutes: 1440 = daily (slow, few trades), 60/30/15/5 =
+    # intraday (signals move faster -> more frequent trading). Saxo Horizon /
+    # yfinance interval are derived from this.
+    market_horizon_minutes: int = 1440
+
+    # ---- Costs / churn control (v6) ---------------------------------
+    # Commission charged per fill: a fixed amount plus a fraction of notional.
+    # Applied in paper mode and used for cost-awareness; when live, Saxo charges
+    # its own real commission, so keep these realistic before going live.
+    commission_per_trade: float = 3.0  # fixed, account currency
+    commission_pct: float = 0.0008  # 8 bps of notional
+    slippage_bps: float = 5.0
+    # Minimum minutes between trades on the SAME symbol (0 = no limit). Raising
+    # this prevents commission-eating churn when trading on a fast timeframe.
+    trade_cooldown_minutes: int = 0
+    # Skip orders whose notional is below this (avoids tiny, commission-heavy
+    # trades). 0 = no minimum.
+    min_trade_notional: float = 0.0
 
     # ---- Discovery / screener (v4) ----------------------------------
     discovery_enabled: bool = False  # auto-refresh the universe from the screen

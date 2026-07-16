@@ -43,6 +43,13 @@ class SettingsUpdate(BaseModel):
     market_data_source: str | None = None
     news_enabled: bool | None = None
     market_lookback_days: int | None = None
+    market_horizon_minutes: int | None = None
+    # Costs / churn
+    commission_per_trade: float | None = None
+    commission_pct: float | None = None
+    slippage_bps: float | None = None
+    trade_cooldown_minutes: int | None = None
+    min_trade_notional: float | None = None
     # Discovery
     discovery_enabled: bool | None = None
     discovery_top_n: int | None = None
@@ -75,6 +82,12 @@ def _view() -> dict:
         "market_data_source": settings.market_data_source,
         "news_enabled": settings.news_enabled,
         "market_lookback_days": settings.market_lookback_days,
+        "market_horizon_minutes": settings.market_horizon_minutes,
+        "commission_per_trade": settings.commission_per_trade,
+        "commission_pct": settings.commission_pct,
+        "slippage_bps": settings.slippage_bps,
+        "trade_cooldown_minutes": settings.trade_cooldown_minutes,
+        "min_trade_notional": settings.min_trade_notional,
         "discovery_enabled": settings.discovery_enabled,
         "discovery_top_n": settings.discovery_top_n,
         "discovery_candidates": settings.discovery_candidates,

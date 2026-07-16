@@ -39,6 +39,12 @@ export function SettingsMenu({ onChanged, onToast }: { onChanged: () => void; on
         market_data_source: v.market_data_source,
         news_enabled: v.news_enabled,
         market_lookback_days: v.market_lookback_days,
+        market_horizon_minutes: v.market_horizon_minutes,
+        commission_per_trade: v.commission_per_trade,
+        commission_pct: v.commission_pct,
+        slippage_bps: v.slippage_bps,
+        trade_cooldown_minutes: v.trade_cooldown_minutes,
+        min_trade_notional: v.min_trade_notional,
         discovery_enabled: v.discovery_enabled,
         discovery_top_n: v.discovery_top_n,
         discovery_candidates: v.discovery_candidates,
@@ -214,6 +220,35 @@ export function SettingsMenu({ onChanged, onToast }: { onChanged: () => void; on
             <button className="secondary" disabled={busy} onClick={screen}>Screen now</button>
             <button disabled={busy} onClick={applyDisc}>Apply to universe</button>
           </div>
+        </div>
+
+        {/* --- Trading cadence & costs --- */}
+        <div>
+          <h3 style={{ fontSize: 13 }}>Cadence &amp; costs</h3>
+          <Field label="Bar timeframe" hint="Shorter = trades more often (intraday). Daily = calm.">
+            <select value={String(form.market_horizon_minutes)} onChange={(e) => set("market_horizon_minutes", Number(e.target.value))}>
+              <option value={1440}>Daily</option>
+              <option value={60}>1 hour</option>
+              <option value={30}>30 min</option>
+              <option value={15}>15 min</option>
+              <option value={5}>5 min</option>
+            </select>
+          </Field>
+          <Field label="Commission per trade (fixed)" hint="Real Saxo kurtage-like cost, applied in paper P&L.">
+            <input type="text" value={String(form.commission_per_trade)} onChange={(e) => set("commission_per_trade", Number(e.target.value) || 0)} style={{ maxWidth: 90 }} />
+          </Field>
+          <Field label="Commission % (fraction)" hint="e.g. 0.0008 = 8 bps of notional">
+            <input type="text" value={String(form.commission_pct)} onChange={(e) => set("commission_pct", Number(e.target.value) || 0)} style={{ maxWidth: 90 }} />
+          </Field>
+          <Field label="Slippage (bps)">
+            <input type="text" value={String(form.slippage_bps)} onChange={(e) => set("slippage_bps", Number(e.target.value) || 0)} style={{ maxWidth: 90 }} />
+          </Field>
+          <Field label="Trade cooldown (min)" hint="Min minutes between trades on the same symbol. Raise to curb commission churn.">
+            <input type="text" value={String(form.trade_cooldown_minutes)} onChange={(e) => set("trade_cooldown_minutes", Number(e.target.value) || 0)} style={{ maxWidth: 90 }} />
+          </Field>
+          <Field label="Min trade notional" hint="Skip trades smaller than this (avoids tiny, commission-heavy orders). 0 = off.">
+            <input type="text" value={String(form.min_trade_notional)} onChange={(e) => set("min_trade_notional", Number(e.target.value) || 0)} style={{ maxWidth: 110 }} />
+          </Field>
         </div>
       </div>
 
