@@ -196,6 +196,8 @@ export interface SettingsView {
   saxo_token_endpoint: string;
   default_broker_mode: string;
   live_trading_enabled: boolean;
+  quant_score_threshold: number;
+  news_score_threshold: number;
   market_data_source: string;
   news_enabled: boolean;
   market_lookback_days: number;

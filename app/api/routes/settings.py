@@ -39,6 +39,9 @@ class SettingsUpdate(BaseModel):
     # Broker / safety
     default_broker_mode: str | None = None
     live_trading_enabled: bool | None = None
+    # Decision gates
+    quant_score_threshold: float | None = None
+    news_score_threshold: float | None = None
     # Data & news
     market_data_source: str | None = None
     news_enabled: bool | None = None
@@ -81,6 +84,8 @@ def _view() -> dict:
         "saxo_token_endpoint": settings.saxo_token_endpoint or "",
         "default_broker_mode": settings.default_broker_mode,
         "live_trading_enabled": settings.live_trading_enabled,
+        "quant_score_threshold": settings.quant_score_threshold,
+        "news_score_threshold": settings.news_score_threshold,
         "market_data_source": settings.market_data_source,
         "news_enabled": settings.news_enabled,
         "market_lookback_days": settings.market_lookback_days,

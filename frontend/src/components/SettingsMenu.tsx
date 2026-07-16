@@ -36,6 +36,8 @@ export function SettingsMenu({ onChanged, onToast }: { onChanged: () => void; on
         saxo_token_endpoint: v.saxo_token_endpoint,
         default_broker_mode: v.default_broker_mode,
         live_trading_enabled: v.live_trading_enabled,
+        quant_score_threshold: v.quant_score_threshold,
+        news_score_threshold: v.news_score_threshold,
         market_data_source: v.market_data_source,
         news_enabled: v.news_enabled,
         market_lookback_days: v.market_lookback_days,
@@ -246,6 +248,12 @@ export function SettingsMenu({ onChanged, onToast }: { onChanged: () => void; on
         {/* --- Trading cadence & costs --- */}
         <div>
           <h3 style={{ fontSize: 13 }}>Cadence &amp; costs</h3>
+          <Field label="Quant score gate (buy if above)" hint="Default 70. Lower ⇒ trades more often on momentum. Lower to ~60 to see paper activity.">
+            <input type="text" value={String(form.quant_score_threshold)} onChange={(e) => set("quant_score_threshold", Number(e.target.value))} style={{ maxWidth: 90 }} />
+          </Field>
+          <Field label="News score gate (buy if above)" hint="Default 70. Without AI, news sits ~50 — set to 49 to effectively disable the news gate in paper.">
+            <input type="text" value={String(form.news_score_threshold)} onChange={(e) => set("news_score_threshold", Number(e.target.value))} style={{ maxWidth: 90 }} />
+          </Field>
           <Field label="Bar timeframe" hint="Shorter = trades more often (intraday). Daily = calm.">
             <select value={String(form.market_horizon_minutes)} onChange={(e) => set("market_horizon_minutes", Number(e.target.value))}>
               <option value={1440}>Daily</option>

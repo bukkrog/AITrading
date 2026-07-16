@@ -108,7 +108,11 @@ def tick(session: Session) -> dict:
 
         universe = _universe(state)
         results = strategy_engine.run_cycle(
-            session, universe, live=state.live_mode, fetch_news=settings.news_enabled
+            session,
+            universe,
+            live=state.live_mode,
+            fetch_news=settings.news_enabled,
+            refresh_data=True,
         )
         checks = monitoring.run_checks(session)
     except Exception as exc:

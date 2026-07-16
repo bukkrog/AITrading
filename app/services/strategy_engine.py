@@ -31,7 +31,7 @@ from app.logging_config import get_logger
 from app.portfolio.engine import PortfolioEngine
 from app.risk.engine import RiskEngine
 from app.schemas.trading import SignalResult, TradeProposal
-from app.services import audit_log_service, signal_engine
+from app.services import audit_log_service, market_data_service, signal_engine
 from app.strategies.base import Strategy
 from app.strategies.momentum import MomentumStrategy
 
@@ -111,12 +111,31 @@ def run_cycle(
     strategy: Strategy | None = None,
     live: bool = False,
     fetch_news: bool = False,
+    refresh_data: bool = False,
 ) -> list[SignalResult]:
     """Run one full trading cycle over ``symbols`` (``live`` uses tight caps).
 
     When ``fetch_news`` is set, headlines are pulled from the live feed for any
-    symbol not already present in ``headlines_map``.
+    symbol not already present in ``headlines_map``. When ``refresh_data`` is set,
+    fresh bars are fetched and stored for ``symbols`` first — otherwise the cycle
+    would evaluate only whatever bars already sit in the store (so a rotating
+    discovery universe would never get priced).
     """
+    from app.config import settings as _settings
+
+    if refresh_data and symbols:
+        try:
+            market_data_service.refresh(
+                session, symbols, days=_settings.market_lookback_days
+            )
+            session.flush()
+        except Exception as exc:  # never let a data hiccup kill the whole cycle
+            audit_log_service.record(
+                session,
+                AuditCategory.SYSTEM,
+                "data_refresh_error",
+                message=str(exc)[:200],
+            )
     headlines_map = dict(headlines_map or {})
     if fetch_news:
         from app.data import feeds
