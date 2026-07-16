@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.data.database import get_session
 from app.data.market_data import get_bars_df
 from app.data.models import Position, PortfolioSnapshot
@@ -12,6 +13,28 @@ from app.portfolio import attribution as attribution_mod
 from app.portfolio.engine import PortfolioEngine
 
 router = APIRouter(prefix="/portfolio", tags=["portfolio"])
+
+
+def _enrich(pos: dict) -> dict:
+    """Add gain % and stop-loss distance to a position dict.
+
+    ``pnl_pct`` is the unrealized gain/loss vs entry. When a hard stop-loss is
+    configured (``stop_loss_pct`` > 0), ``stop_price`` is the trigger and
+    ``stop_distance_pct`` is the cushion between the current price and that
+    trigger (as % of current price; negative means it would already trip).
+    """
+    avg = pos.get("avg_price") or 0.0
+    last = pos.get("last_price") or avg
+    pos["pnl_pct"] = round((last - avg) / avg * 100, 2) if avg else 0.0
+    slp = settings.stop_loss_pct
+    if slp and slp > 0 and avg:
+        stop_price = avg * (1 - slp)
+        pos["stop_price"] = round(stop_price, 4)
+        pos["stop_distance_pct"] = round((last - stop_price) / last * 100, 2) if last else 0.0
+    else:
+        pos["stop_price"] = None
+        pos["stop_distance_pct"] = None
+    return pos
 
 
 def _prices(session: Session, symbols: list[str]) -> dict[str, float]:
@@ -45,14 +68,14 @@ def _saxo_portfolio(engine: PortfolioEngine) -> dict | None:
         "currency": snap.get("currency"),
         "open_orders": snap.get("orders", []),
         "positions": [
-            {
+            _enrich({
                 "symbol": p["symbol"],
                 "quantity": p["quantity"],
                 "avg_price": round(p["avg_price"], 4),
                 "last_price": round(p["last_price"], 4),
                 "market_value": round(p["market_value"], 2),
                 "unrealized_pnl": round(p["unrealized_pnl"], 2),
-            }
+            })
             for p in snap["positions"]
         ],
     }
@@ -74,7 +97,7 @@ def get_portfolio(session: Session = Depends(get_session)) -> dict:
         "drawdown_pct": round(engine.drawdown_pct(prices) * 100, 2),
         "kill_switch_engaged": engine.kill_switch_engaged,
         "positions": [
-            {
+            _enrich({
                 "symbol": p.symbol,
                 "quantity": p.quantity,
                 "avg_price": round(p.avg_price, 2),
@@ -83,7 +106,7 @@ def get_portfolio(session: Session = Depends(get_session)) -> dict:
                 "unrealized_pnl": round(
                     p.quantity * (prices.get(p.symbol, p.avg_price) - p.avg_price), 2
                 ),
-            }
+            })
             for p in positions
         ],
     }

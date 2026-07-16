@@ -161,13 +161,19 @@ export function App() {
               <h2>Positions</h2>
               {portfolio.positions.length > 0 ? (
                 <table>
-                  <thead><tr><th>Symbol</th><th>Qty</th><th>Avg</th><th>Last</th><th>Value</th><th>Unrealised P/L</th></tr></thead>
+                  <thead><tr><th>Symbol</th><th>Qty</th><th>Avg</th><th>Last</th><th>Value</th><th>Unrealised P/L</th><th>Gain %</th><th>To stop-loss</th></tr></thead>
                   <tbody>
                     {portfolio.positions.map((p) => (
                       <tr key={p.symbol}>
                         <td>{p.symbol}</td><td>{p.quantity}</td><td>{p.avg_price.toFixed(2)}</td>
                         <td>{p.last_price.toFixed(2)}</td><td>{fmt(p.market_value)}</td>
                         <td className={p.unrealized_pnl >= 0 ? "pos" : "neg"}>{p.unrealized_pnl.toFixed(2)}</td>
+                        <td className={(p.pnl_pct ?? 0) >= 0 ? "pos" : "neg"}>{(p.pnl_pct ?? 0) >= 0 ? "+" : ""}{(p.pnl_pct ?? 0).toFixed(2)}%</td>
+                        <td className={p.stop_distance_pct == null ? "muted" : p.stop_distance_pct <= 2 ? "neg" : "pos"}>
+                          {p.stop_distance_pct == null
+                            ? "no stop"
+                            : `${p.stop_distance_pct.toFixed(1)}% (@ ${p.stop_price?.toFixed(2)})`}
+                        </td>
                       </tr>
                     ))}
                   </tbody>

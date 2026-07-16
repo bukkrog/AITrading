@@ -7,6 +7,9 @@ export interface Position {
   last_price: number;
   market_value: number;
   unrealized_pnl: number;
+  pnl_pct?: number;
+  stop_price?: number | null;
+  stop_distance_pct?: number | null;
 }
 
 export interface Portfolio {
