@@ -1,0 +1,18 @@
+[project]
+name = "ai-trading-platform"
+version = "0.1.0"
+description = "Controlled, phased AI-assisted trading platform (paper-first, Saxo-targeted)."
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+# Make `app` and `scripts` importable when running pytest from the repo root.
+pythonpath = ["."]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]

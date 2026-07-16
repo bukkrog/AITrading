@@ -1,0 +1,34 @@
+# ---- Core web / API ----
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+pydantic==2.10.4
+pydantic-settings==2.7.1
+
+# ---- Persistence ----
+SQLAlchemy==2.0.36
+# psycopg (binary) is only needed when DATABASE_URL points at PostgreSQL/TimescaleDB.
+# The default DATABASE_URL uses SQLite so the platform runs with zero infra.
+psycopg2-binary==2.9.10
+
+# ---- Data / numerics ----
+pandas==2.2.3
+numpy==2.2.1
+
+# ---- AI analysis layer ----
+anthropic==0.42.0
+
+# ---- Dashboard ----
+streamlit==1.41.1
+plotly==5.24.1
+
+# ---- Tooling / tests ----
+pytest==8.3.4
+httpx==0.28.1
+python-dotenv==1.0.1
+
+# ---- Market data / news feed (v4) ----
+yfinance==1.5.1
+
+# ---- Backtesting (v2 roadmap; MVP ships a lightweight built-in engine) ----
+# vectorbt==0.26.2
+# backtrader==1.9.78.123

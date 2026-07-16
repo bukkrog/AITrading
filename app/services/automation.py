@@ -1,0 +1,266 @@
+"""Automation engine (v3) — runs trading cycles automatically behind guardrails.
+
+Guardrails enforced on every ``tick``:
+  * a latched **emergency stop** halts everything until explicitly cleared,
+  * the **kill switch** blocks a tick,
+  * **live mode** requires the live-readiness gate to pass, else automation
+    disables itself and raises an alert,
+  * each tick runs monitoring/drift checks after trading.
+
+The background loop is a daemon thread that calls ``tick`` on the configured
+interval. ``tick`` itself is synchronous and directly unit-testable.
+"""
+from __future__ import annotations
+
+import threading
+import time
+from datetime import datetime, timezone
+
+from sqlalchemy.orm import Session
+
+from app.config import settings
+from app.core.enums import AlertSeverity, AuditCategory, OrderSide
+from app.data.database import session_scope
+from app.data.market_data import get_bars_df
+from app.data.models import AutomationState
+from app.logging_config import get_logger
+from app.schemas.trading import OrderRequest
+from app.services import alerts_service, audit_log_service, live_gate, monitoring, strategy_engine
+
+logger = get_logger(__name__)
+
+_thread: threading.Thread | None = None
+_stop = threading.Event()
+
+
+def get_state(session: Session) -> AutomationState:
+    state = session.get(AutomationState, 1)
+    if state is None:
+        state = AutomationState(
+            id=1,
+            interval_seconds=settings.automation_interval_seconds,
+            universe=settings.automation_universe,
+        )
+        session.add(state)
+        session.flush()
+    return state
+
+
+def _universe(state: AutomationState) -> list[str]:
+    raw = state.universe or settings.automation_universe
+    return [s.strip().upper() for s in raw.split(",") if s.strip()]
+
+
+def configure(
+    session: Session,
+    *,
+    interval_seconds: int | None = None,
+    universe: str | None = None,
+    live_mode: bool | None = None,
+) -> AutomationState:
+    state = get_state(session)
+    if interval_seconds is not None:
+        state.interval_seconds = max(10, int(interval_seconds))
+    if universe is not None:
+        state.universe = universe
+    if live_mode is not None:
+        state.live_mode = bool(live_mode)
+    state.updated_at = datetime.now(timezone.utc)
+    session.flush()
+    return state
+
+
+def tick(session: Session) -> dict:
+    """Run one guarded automation cycle. Returns a summary dict."""
+    state = get_state(session)
+
+    if state.emergency_stopped:
+        return {"ran": False, "reason": "emergency_stop_engaged"}
+
+    from app.portfolio.engine import PortfolioEngine
+
+    pf = PortfolioEngine(session)
+    if pf.kill_switch_engaged:
+        return {"ran": False, "reason": "kill_switch_engaged"}
+
+    if state.live_mode:
+        gate = live_gate.evaluate(session)
+        if not gate["ready"]:
+            state.enabled = False
+            session.flush()
+            failed = [c["name"] for c in gate["checks"] if not c["passed"]]
+            alerts_service.raise_alert(
+                session,
+                "live_gate",
+                f"Live automation disabled — readiness gate failed: {', '.join(failed)}.",
+                severity=AlertSeverity.CRITICAL,
+                payload=gate,
+            )
+            return {"ran": False, "reason": "live_gate_failed", "failed": failed}
+
+    try:
+        # Optionally let the screener choose what to trade before this cycle.
+        if settings.discovery_enabled:
+            from app.services import discovery
+
+            discovery.apply_to_automation(session)
+            state = get_state(session)  # universe just changed
+
+        universe = _universe(state)
+        results = strategy_engine.run_cycle(
+            session, universe, live=state.live_mode, fetch_news=settings.news_enabled
+        )
+        checks = monitoring.run_checks(session)
+    except Exception as exc:
+        # Surface failures (e.g. missing Saxo token) instead of failing silently.
+        state.last_run_at = datetime.now(timezone.utc)
+        state.runs_count += 1
+        session.flush()
+        alerts_service.raise_alert(
+            session,
+            "automation",
+            f"Automation tick failed: {exc}",
+            severity=AlertSeverity.CRITICAL,
+        )
+        audit_log_service.record(
+            session, AuditCategory.AUTOMATION, "tick_error", message=str(exc)
+        )
+        return {"ran": False, "reason": "error", "error": str(exc)}
+
+    approved = [r.symbol for r in results if r.approved]
+    state.last_run_at = datetime.now(timezone.utc)
+    state.runs_count += 1
+    session.flush()
+    audit_log_service.record(
+        session,
+        AuditCategory.AUTOMATION,
+        "tick",
+        message=f"Cycle #{state.runs_count} ({'live' if state.live_mode else 'paper'}) "
+        f"over [{', '.join(universe)}]: evaluated {len(results)}, "
+        f"approved {len(approved)}{' (' + ', '.join(approved) + ')' if approved else ''}, "
+        f"{len(checks)} alert(s).",
+    )
+    return {
+        "ran": True,
+        "live_mode": state.live_mode,
+        "universe": universe,
+        "approved": approved,
+        "alerts_raised": checks,
+        "runs_count": state.runs_count,
+    }
+
+
+def start(session: Session) -> AutomationState:
+    """Enable automation and ensure the background loop is running."""
+    state = get_state(session)
+    if state.emergency_stopped:
+        raise RuntimeError("Clear the emergency stop before starting automation.")
+    state.enabled = True
+    state.last_run_at = None  # run the first cycle immediately, not after one interval
+    state.updated_at = datetime.now(timezone.utc)
+    session.flush()
+    _ensure_loop()
+    return state
+
+
+def stop(session: Session) -> AutomationState:
+    state = get_state(session)
+    state.enabled = False
+    state.updated_at = datetime.now(timezone.utc)
+    session.flush()
+    return state
+
+
+def emergency_stop(session: Session, *, flatten: bool = True) -> dict:
+    """Latch automation off, engage the kill switch, and (optionally) flatten
+    all open positions immediately."""
+    from app.portfolio.engine import PortfolioEngine
+
+    state = get_state(session)
+    state.enabled = False
+    state.emergency_stopped = True
+    state.updated_at = datetime.now(timezone.utc)
+    session.flush()
+
+    pf = PortfolioEngine(session)
+    pf.set_kill_switch(True, actor="emergency_stop")
+
+    closed: list[str] = []
+    if flatten:
+        closed = _flatten_all(session, pf)
+
+    alerts_service.raise_alert(
+        session,
+        "emergency_stop",
+        f"EMERGENCY STOP engaged. Automation halted, kill switch on, "
+        f"{len(closed)} position(s) flattened.",
+        severity=AlertSeverity.CRITICAL,
+        payload={"flattened": closed},
+    )
+    return {"emergency_stopped": True, "flattened": closed}
+
+
+def clear_emergency(session: Session) -> AutomationState:
+    state = get_state(session)
+    state.emergency_stopped = False
+    state.updated_at = datetime.now(timezone.utc)
+    session.flush()
+    audit_log_service.record(
+        session, AuditCategory.AUTOMATION, "clear_emergency",
+        message="Emergency stop cleared. Kill switch remains until released.",
+    )
+    return state
+
+
+def _flatten_all(session: Session, pf) -> list[str]:
+    """Market-sell every open position (paper: at last close)."""
+    from app.execution.broker_adapter import build_broker
+    from app.execution.execution_engine import ExecutionEngine
+
+    engine = ExecutionEngine(session, pf, build_broker(pf.broker_mode))
+    closed: list[str] = []
+    for pos in list(pf.open_positions()):
+        df = get_bars_df(session, pos.symbol)
+        price = float(df["close"].iloc[-1]) if len(df) else pos.avg_price
+        engine.submit(
+            OrderRequest(symbol=pos.symbol, side=OrderSide.SELL, quantity=pos.quantity),
+            price,
+        )
+        closed.append(pos.symbol)
+    return closed
+
+
+# ---- Background loop --------------------------------------------------
+def _loop() -> None:
+    logger.info("Automation loop started.")
+    while not _stop.is_set():
+        try:
+            with session_scope() as session:
+                state = get_state(session)
+                due = state.enabled and not state.emergency_stopped
+                if due and state.last_run_at is not None:
+                    elapsed = (
+                        datetime.now(timezone.utc) - state.last_run_at
+                    ).total_seconds()
+                    due = elapsed >= state.interval_seconds
+                if due:
+                    tick(session)
+        except Exception as exc:  # pragma: no cover - loop resilience
+            logger.exception("Automation loop error: %s", exc)
+        _stop.wait(timeout=5.0)
+    logger.info("Automation loop stopped.")
+
+
+def _ensure_loop() -> None:
+    global _thread
+    if _thread is not None and _thread.is_alive():
+        return
+    _stop.clear()
+    _thread = threading.Thread(target=_loop, name="automation-loop", daemon=True)
+    _thread.start()
+
+
+def shutdown_loop() -> None:
+    _stop.set()
+    if _thread is not None:
+        _thread.join(timeout=6.0)

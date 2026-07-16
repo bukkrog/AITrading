@@ -1,0 +1,106 @@
+import type {
+  Alert,
+  Attribution,
+  AuditEntry,
+  AutomationInfo,
+  BrokerHealth,
+  BrokerModeInfo,
+  ComparisonRow,
+  Config,
+  DiscoveryCandidate,
+  Monitoring,
+  Portfolio,
+  SettingsView,
+  Signal,
+  Snapshot,
+} from "./types";
+
+// Base URL for the API. Override with VITE_API_BASE at build time; defaults to
+// the local FastAPI server started with `uvicorn app.main:app`.
+const BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:8000";
+
+async function get<T>(path: string): Promise<T> {
+  const res = await fetch(`${BASE}${path}`);
+  if (!res.ok) throw new Error(`GET ${path} -> ${res.status}`);
+  return res.json() as Promise<T>;
+}
+
+async function post<T>(path: string): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, { method: "POST" });
+  if (!res.ok) {
+    const detail = await res.json().catch(() => ({}));
+    throw new Error(detail.detail ?? `POST ${path} -> ${res.status}`);
+  }
+  return res.json() as Promise<T>;
+}
+
+async function postJson<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const detail = await res.json().catch(() => ({}));
+    throw new Error(detail.detail ?? `POST ${path} -> ${res.status}`);
+  }
+  return res.json() as Promise<T>;
+}
+
+export const api = {
+  config: () => get<Config>("/config"),
+  portfolio: () => get<Portfolio>("/portfolio"),
+  snapshots: () => get<Snapshot[]>("/portfolio/snapshots"),
+  signals: () => get<Signal[]>("/signals?limit=25"),
+  audit: (limit = 150) => get<AuditEntry[]>(`/audit?limit=${limit}`),
+  brokerMode: () => get<BrokerModeInfo>("/control/broker-mode"),
+  brokerHealth: () => get<BrokerHealth>("/control/broker-health"),
+  setBrokerMode: (mode: string) =>
+    post<{ broker_mode: string }>(`/control/broker-mode?mode=${mode}`),
+  setKillSwitch: (engaged: boolean) =>
+    post<{ kill_switch_engaged: boolean }>(
+      `/control/kill-switch?engaged=${engaged}`,
+    ),
+  runCycle: (symbols: string[]) =>
+    postJson<{ evaluated: number; approved: string[] }>("/signals/run-cycle", {
+      symbols,
+    }),
+
+  // ---- v3 ----
+  monitoring: () => get<Monitoring>("/automation/monitoring"),
+  automation: () => get<AutomationInfo>("/automation"),
+  automationStart: () => post<unknown>("/automation/start"),
+  automationStop: () => post<unknown>("/automation/stop"),
+  automationTick: () => post<{ ran: boolean; reason?: string }>("/automation/tick"),
+  configureAutomation: (body: { interval_seconds?: number; universe?: string; live_mode?: boolean }) =>
+    postJson<unknown>("/automation/configure", body),
+  emergencyStop: () => post<{ emergency_stopped: boolean; flattened: string[] }>("/automation/emergency-stop"),
+  clearEmergency: () => post<unknown>("/automation/clear-emergency"),
+  alerts: (onlyActive = true) => get<Alert[]>(`/alerts?only_active=${onlyActive}&limit=40`),
+  acknowledgeAlerts: () => post<{ acknowledged: number }>("/alerts/acknowledge"),
+  runChecks: () => post<{ raised: string[] }>("/alerts/check"),
+  attribution: () => get<Attribution>("/portfolio/attribution"),
+  compare: (symbol: string) =>
+    get<{ symbol: string; bars: number; results: ComparisonRow[] }>(
+      `/backtest/compare?symbol=${symbol}`,
+    ),
+  getSettings: () => get<SettingsView>("/settings"),
+  updateSettings: (body: Record<string, unknown>) =>
+    postJson<{ updated: string[]; settings: SettingsView }>("/settings", body),
+  discovery: (topN?: number) =>
+    get<{ candidates: DiscoveryCandidate[] }>(`/discovery${topN ? `?top_n=${topN}` : ""}`),
+  applyDiscovery: (topN?: number) =>
+    post<{ universe: string[] }>(`/discovery/apply${topN ? `?top_n=${topN}` : ""}`),
+  setAllocation: (amount: number) =>
+    post<{ cash: number }>(`/control/allocation?amount=${amount}`),
+  saxoTest: () =>
+    get<{ connected: boolean; environment?: string; error?: string; balance?: Record<string, unknown>; account_key?: string }>(
+      "/control/saxo-test",
+    ),
+  cancelSaxoOrder: (orderId?: string) =>
+    post<{ cancelled: string[] }>(`/control/saxo-cancel${orderId ? `?order_id=${orderId}` : ""}`),
+  saxoSelfTest: (symbol: string, placeOrder = false, quantity = 1) =>
+    get<{ ok: boolean; symbol: string; placed_order: boolean; steps: { name: string; ok: boolean; detail?: unknown; error?: string }[] }>(
+      `/control/saxo-selftest?symbol=${encodeURIComponent(symbol)}&place_order=${placeOrder}&quantity=${quantity}`,
+    ),
+};
