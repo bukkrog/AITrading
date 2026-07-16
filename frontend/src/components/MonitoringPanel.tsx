@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { api } from "../api";
-import type { AutomationInfo, MarketHours, Monitoring, Portfolio } from "../types";
+import type { AutomationInfo, BrokerHealth, BrokerModeInfo, MarketHours, Monitoring, Portfolio } from "../types";
 
 function LimitBar({ label, value, limit, util }: { label: string; value: number; limit: number; util: number }) {
   const cls = util >= 90 ? "hot" : util >= 60 ? "mid" : "";
@@ -20,11 +20,13 @@ interface Props {
   automation: AutomationInfo;
   portfolio: Portfolio;
   marketHours: MarketHours | null;
+  brokerMode: BrokerModeInfo | null;
+  brokerHealth: BrokerHealth | null;
   onChanged: () => void;
   onToast: (m: string) => void;
 }
 
-export function MonitoringPanel({ monitoring, automation, portfolio, marketHours, onChanged, onToast }: Props) {
+export function MonitoringPanel({ monitoring, automation, portfolio, marketHours, brokerMode, brokerHealth, onChanged, onToast }: Props) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [interval, setIntervalSec] = useState(String(automation.state.interval_seconds));
@@ -90,6 +92,28 @@ export function MonitoringPanel({ monitoring, automation, portfolio, marketHours
               {!e.open && e.next_open_local ? ` · opens ${e.next_open_local}` : ""}
             </span>
           ))}
+        </div>
+      )}
+
+      {brokerMode && (
+        <div className="control-row" style={{ marginBottom: 12 }}>
+          <label className="field">Broker</label>
+          <span style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <select
+              value={brokerMode.broker_mode}
+              disabled={busy}
+              onChange={(e) => act(() => api.setBrokerMode(e.target.value), `Broker set to ${e.target.value}`)}
+            >
+              {brokerMode.available_modes.map((m) => (
+                <option key={m} value={m}>{m === "saxo" ? `saxo (${brokerMode.saxo_environment})` : m}</option>
+              ))}
+            </select>
+            {brokerMode.broker_mode === "saxo" && brokerHealth && (
+              <span className={`badge ${brokerHealth.connected ? "ok" : ""}`}>
+                {brokerHealth.connected ? "connected" : "not connected"}
+              </span>
+            )}
+          </span>
         </div>
       )}
 
