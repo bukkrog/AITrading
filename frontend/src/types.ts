@@ -208,6 +208,8 @@ export interface SettingsView {
   discovery_enabled: boolean;
   discovery_top_n: number;
   discovery_candidates: string;
+  discovery_sources: string;
+  discovery_max_pool: number;
   automation_interval_seconds: number;
   automation_universe: string;
   options: Record<string, string[]>;

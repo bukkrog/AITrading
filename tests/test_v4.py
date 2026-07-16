@@ -63,6 +63,24 @@ def test_discovery_apply_sets_universe(session, monkeypatch):
     assert state.universe == ",".join(picks)
 
 
+def test_universe_clean_filters_junk():
+    from app.services import universe
+
+    cleaned = universe._clean(["aapl", "MSFT", "BRK.B", "TOOLONGX", "", "123", "NVDA"])
+    assert cleaned == ["AAPL", "MSFT", "NVDA"]  # class-dots, long, numeric dropped
+
+
+def test_universe_gather_momentum_first_and_capped(monkeypatch):
+    from app.services import universe
+
+    monkeypatch.setitem(universe.SOURCES, "wsb", lambda: ["GME", "AMC", "TSLA"])
+    monkeypatch.setitem(universe.SOURCES, "sp500", lambda: ["AAPL", "MSFT", "TSLA", "KO"])
+    pool = universe.gather(["sp500", "wsb"], max_symbols=4)
+    # momentum source (wsb) names come first; deduped; capped to 4.
+    assert pool[:3] == ["GME", "AMC", "TSLA"]
+    assert len(pool) == 4 and "AAPL" in pool
+
+
 def test_set_allocation(session):
     pf = PortfolioEngine(session)
     pf.set_allocation(50_000, reset_positions=True)

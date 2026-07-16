@@ -48,6 +48,8 @@ export function SettingsMenu({ onChanged, onToast }: { onChanged: () => void; on
         discovery_enabled: v.discovery_enabled,
         discovery_top_n: v.discovery_top_n,
         discovery_candidates: v.discovery_candidates,
+        discovery_sources: v.discovery_sources,
+        discovery_max_pool: v.discovery_max_pool,
         automation_interval_seconds: v.automation_interval_seconds,
         automation_universe: v.automation_universe,
       });
@@ -211,8 +213,27 @@ export function SettingsMenu({ onChanged, onToast }: { onChanged: () => void; on
               <span>{form.discovery_enabled ? "on" : "off"}</span>
             </label>
           </Field>
+          <Field label="Momentum sources (scan the market)" hint="Selected sources are gathered, ranked by momentum, and the top N are traded. Overrides the static pool below.">
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+              {(opt.discovery_sources ?? []).map((src) => {
+                const cur = String(form.discovery_sources || "").split(",").map((x) => x.trim()).filter(Boolean);
+                const on = cur.includes(src);
+                const label = { day_gainers: "Top gainers", most_actives: "Most active", wsb: "WallStreetBets", sp500: "S&P 500", dow30: "Dow 30" }[src] ?? src;
+                return (
+                  <label key={src} style={{ display: "flex", gap: 5, alignItems: "center", fontSize: 12 }}>
+                    <input type="checkbox" checked={on} onChange={(e) => {
+                      const next = e.target.checked ? [...cur, src] : cur.filter((x) => x !== src);
+                      set("discovery_sources", next.join(","));
+                    }} />
+                    <span>{label}</span>
+                  </label>
+                );
+              })}
+            </div>
+          </Field>
           <Field label="Top N"><input type="text" value={String(form.discovery_top_n)} onChange={(e) => set("discovery_top_n", Number(e.target.value) || 6)} style={{ maxWidth: 80 }} /></Field>
-          <Field label="Candidate pool (comma-separated)">
+          <Field label="Max pool (before ranking)" hint="Cap on gathered tickers; momentum sources prioritised."><input type="text" value={String(form.discovery_max_pool)} onChange={(e) => set("discovery_max_pool", Number(e.target.value) || 100)} style={{ maxWidth: 80 }} /></Field>
+          <Field label="Static candidate pool (used only if no source above)">
             <textarea value={String(form.discovery_candidates)} onChange={(e) => set("discovery_candidates", e.target.value)}
               rows={3} style={{ width: "100%", background: "var(--panel-2)", color: "var(--text)", border: "1px solid var(--border)", borderRadius: 8, padding: 8, fontSize: 12 }} />
           </Field>

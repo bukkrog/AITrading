@@ -65,12 +65,37 @@ def _score(df) -> tuple[float, dict]:
     }
 
 
+def _sources() -> list[str]:
+    return [s.strip() for s in settings.discovery_sources.split(",") if s.strip()]
+
+
 def screen(session: Session, *, top_n: int | None = None, refresh: bool = True) -> list[Candidate]:
     """Rank the candidate pool and return the top N by score.
 
-    When ``refresh`` and the feed is live, fetches fresh bars for candidates.
+    If dynamic sources are configured (``discovery_sources``), gather tickers
+    from indices / movers / WSB and rank them by momentum (bulk yfinance).
+    Otherwise rank the static candidate pool using stored bars.
     """
     top_n = top_n or settings.discovery_top_n
+
+    sources = _sources()
+    if sources:
+        from app.services import universe
+
+        rows = universe.discover(sources, top_n, settings.discovery_max_pool)
+        return [
+            Candidate(
+                symbol=r["symbol"],
+                score=r["score"],
+                momentum=r["roc"],
+                trend_gap=r["trend_gap"] / 100.0,
+                avg_volume=0.0,
+                rationale=f"ROC20={r['roc']}%, trend gap {r['trend_gap']}% "
+                f"(sources: {', '.join(sources)}).",
+            )
+            for r in rows
+        ]
+
     candidates = _candidates()
     if refresh:
         market_data_service.refresh(session, candidates)

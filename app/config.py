@@ -172,6 +172,13 @@ class Settings(BaseSettings):
         "AAPL,MSFT,NVDA,AMZN,GOOGL,META,TSLA,NFLX,AMD,JPM,"
         "V,MA,WMT,KO,DIS,XOM,CAT,NKE,BA,INTC"
     )
+    # Dynamic universe sources (v7). When non-empty, the screener gathers tickers
+    # from these instead of the static candidate list, ranks them by momentum,
+    # and trades the top N. Keys: sp500, dow30, day_gainers, most_actives, wsb.
+    discovery_sources: str = ""
+    # Max tickers pulled into the pool before momentum ranking (keeps the bulk
+    # download fast; momentum/attention sources are prioritised when capping).
+    discovery_max_pool: int = 100
 
     # ---- Automation (v3) --------------------------------------------
     automation_interval_seconds: int = 300

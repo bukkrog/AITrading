@@ -54,6 +54,8 @@ class SettingsUpdate(BaseModel):
     discovery_enabled: bool | None = None
     discovery_top_n: int | None = None
     discovery_candidates: str | None = None
+    discovery_sources: str | None = None
+    discovery_max_pool: int | None = None
     # Automation
     automation_interval_seconds: int | None = None
     automation_universe: str | None = None
@@ -91,6 +93,8 @@ def _view() -> dict:
         "discovery_enabled": settings.discovery_enabled,
         "discovery_top_n": settings.discovery_top_n,
         "discovery_candidates": settings.discovery_candidates,
+        "discovery_sources": settings.discovery_sources,
+        "discovery_max_pool": settings.discovery_max_pool,
         "automation_interval_seconds": settings.automation_interval_seconds,
         "automation_universe": settings.automation_universe,
         "options": {
@@ -98,6 +102,7 @@ def _view() -> dict:
             "saxo_environment": ["sim", "live"],
             "default_broker_mode": ["simulation", "saxo"],
             "market_data_source": ["synthetic", "yfinance", "saxo"],
+            "discovery_sources": ["day_gainers", "most_actives", "wsb", "sp500", "dow30"],
         },
         "persistence": "runtime-only (not written to disk; set permanent values in .env)",
     }
