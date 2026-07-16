@@ -29,6 +29,18 @@ def apply(top_n: int | None = None, session: Session = Depends(get_session)) -> 
     return {"universe": picks}
 
 
+@router.get("/discovery/status")
+def discovery_status() -> dict:
+    """When the dynamic-universe market scan last ran (and when it may run again)."""
+    from app.config import settings
+    from app.services import universe
+
+    info = universe.last_scan_info()
+    info["sources"] = [s.strip() for s in settings.discovery_sources.split(",") if s.strip()]
+    info["enabled"] = settings.discovery_enabled
+    return info
+
+
 class RefreshRequest(BaseModel):
     symbols: list[str]
     days: int | None = None

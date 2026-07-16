@@ -92,3 +92,24 @@ def clear_emergency(session: Session = Depends(get_session)) -> dict:
 @router.get("/monitoring")
 def monitoring_status(session: Session = Depends(get_session)) -> dict:
     return monitoring.status(session)
+
+
+@router.get("/market-hours")
+def market_hours_status(session: Session = Depends(get_session)) -> dict:
+    """Open/closed status for the exchanges of the current trading universe."""
+    from app.config import settings
+    from app.services import market_hours
+
+    state = automation.get_state(session)
+    universe = [s.strip().upper() for s in (state.universe or "").split(",") if s.strip()]
+    status = market_hours.status_for_symbols(universe)
+    status["enabled"] = settings.market_hours_enabled
+    # "paused because closed" is true only when automation is on but the market isn't.
+    status["paused"] = (
+        settings.market_hours_enabled
+        and state.enabled
+        and not state.emergency_stopped
+        and not status["any_open"]
+        and settings.market_data_source != "synthetic"
+    )
+    return status

@@ -8,6 +8,8 @@ import type {
   ComparisonRow,
   Config,
   DiscoveryCandidate,
+  DiscoveryStatus,
+  MarketHours,
   Monitoring,
   Portfolio,
   SettingsView,
@@ -91,6 +93,8 @@ export const api = {
     get<{ candidates: DiscoveryCandidate[] }>(`/discovery${topN ? `?top_n=${topN}` : ""}`),
   applyDiscovery: (topN?: number) =>
     post<{ universe: string[] }>(`/discovery/apply${topN ? `?top_n=${topN}` : ""}`),
+  discoveryStatus: () => get<DiscoveryStatus>("/discovery/status"),
+  marketHours: () => get<MarketHours>("/automation/market-hours"),
   setAllocation: (amount: number) =>
     post<{ cash: number }>(`/control/allocation?amount=${amount}`),
   saxoTest: () =>

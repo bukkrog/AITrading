@@ -15,6 +15,7 @@ Design notes:
 from __future__ import annotations
 
 import time
+from datetime import datetime, timezone
 
 from app.logging_config import get_logger
 
@@ -35,6 +36,22 @@ _MOMENTUM_KEYS = ("day_gainers", "most_actives", "wsb")
 # Cache for the ranked result so re-screening throttles under fast ticks.
 _CACHE: dict = {"key": None, "ts": 0.0, "ranked": None}
 _CACHE_TTL = 600.0  # 10 minutes
+
+# Wall-clock timestamp of the last *actual* market scan (cache miss), for the UI.
+_LAST_SCAN: datetime | None = None
+
+
+def last_scan_info() -> dict:
+    """When the heavy market scan last really ran, and the earliest it will again."""
+    if _LAST_SCAN is None:
+        return {"last_scan_at": None, "next_earliest_at": None, "ttl_seconds": _CACHE_TTL}
+    from datetime import timedelta
+
+    return {
+        "last_scan_at": _LAST_SCAN.isoformat(),
+        "next_earliest_at": (_LAST_SCAN + timedelta(seconds=_CACHE_TTL)).isoformat(),
+        "ttl_seconds": _CACHE_TTL,
+    }
 
 
 def _clean(tickers: list[str]) -> list[str]:
@@ -171,6 +188,8 @@ def discover(source_keys: list[str], top_n: int, max_symbols: int = 100) -> list
         return _CACHE["ranked"]
     pool = gather(source_keys, max_symbols)
     ranked = rank_by_momentum(pool, top_n)
+    global _LAST_SCAN
+    _LAST_SCAN = datetime.now(timezone.utc)
     _CACHE.update(key=key, ts=now, ranked=ranked)
     logger.info("universe.discover: %d candidates -> top %d", len(pool), len(ranked))
     return ranked

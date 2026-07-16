@@ -94,6 +94,37 @@ def build_pipeline(
     )
 
 
+def _peak_since(df, since, floor: float) -> float:
+    """Highest high in ``df`` since ``since`` (position entry), never below floor."""
+    try:
+        recent = df["high"][df.index >= since] if since is not None else df["high"]
+        peak = float(recent.max()) if len(recent) else floor
+    except Exception:  # tz/index mismatch — fall back to a safe floor
+        peak = floor
+    return max(peak, floor)
+
+
+def _exit_reason(pos, df, price: float, quant_score: float) -> str | None:
+    """Why (if at all) an open position should be closed this cycle.
+
+    Priced-based triggers (stop-loss / take-profit / trailing-stop) are checked
+    first, then the momentum exit (quant score below the exit floor). Each is
+    opt-in via settings; 0 disables it.
+    """
+    avg = pos.avg_price or price
+    if settings.stop_loss_pct > 0 and price <= avg * (1 - settings.stop_loss_pct):
+        return f"stop-loss (-{settings.stop_loss_pct * 100:.0f}% from entry {avg:.2f})"
+    if settings.take_profit_pct > 0 and price >= avg * (1 + settings.take_profit_pct):
+        return f"take-profit (+{settings.take_profit_pct * 100:.0f}% from entry {avg:.2f})"
+    if settings.trailing_stop_pct > 0:
+        peak = _peak_since(df, getattr(pos, "opened_at", None), floor=max(avg, price))
+        if price <= peak * (1 - settings.trailing_stop_pct):
+            return f"trailing-stop (-{settings.trailing_stop_pct * 100:.0f}% from peak {peak:.2f})"
+    if quant_score < EXIT_QUANT_SCORE:
+        return f"momentum faded (quant {quant_score:.0f} < {EXIT_QUANT_SCORE:.0f})"
+    return None
+
+
 def _latest_prices(session: Session, symbols: list[str]) -> dict[str, float]:
     prices: dict[str, float] = {}
     for sym in symbols:
@@ -161,10 +192,12 @@ def run_cycle(
         df = get_bars_df(session, pos.symbol)
         if not len(df):
             continue
+        price = prices.get(pos.symbol) or float(df["close"].iloc[-1])
         q = pipe.quant_agent.analyze(pos.symbol, df)
-        if q.score < EXIT_QUANT_SCORE:
+        reason = _exit_reason(pos, df, price, q.score)
+        if reason:
             assessment = pipe.risk_agent.assess(
-                pos.symbol, OrderSide.SELL, prices.get(pos.symbol, pos.avg_price), prices
+                pos.symbol, OrderSide.SELL, price, prices
             )
             if assessment.approved and assessment.approved_quantity > 0:
                 pipe.execution_agent.execute(
@@ -172,8 +205,12 @@ def run_cycle(
                         symbol=pos.symbol,
                         side=OrderSide.SELL,
                         quantity=assessment.approved_quantity,
-                        reference_price=prices.get(pos.symbol, pos.avg_price),
+                        reference_price=price,
                     )
+                )
+                audit_log_service.record(
+                    session, AuditCategory.ORDER, "exit", symbol=pos.symbol,
+                    message=f"Sold {pos.symbol}: {reason}.",
                 )
 
     # ---- Entries ------------------------------------------------------

@@ -134,6 +134,25 @@ class Settings(BaseSettings):
     quant_score_threshold: float = 70.0
     news_score_threshold: float = 70.0
 
+    # ---- Exit rules (v8) --------------------------------------------
+    # Automatic sell triggers, on top of the momentum exit (quant < 50). All are
+    # a fraction of the entry (avg) price; 0 disables that trigger.
+    #   stop_loss_pct    -> sell if price falls this far below entry (cut losers).
+    #   take_profit_pct  -> sell if price rises this far above entry (harvest
+    #                       gains into cash so they can fund new trades).
+    #   trailing_stop_pct-> sell if price falls this far from its peak since entry
+    #                       (lock in gains while letting winners run).
+    stop_loss_pct: float = 0.0
+    take_profit_pct: float = 0.0
+    trailing_stop_pct: float = 0.0
+
+    # ---- Market hours (v8) ------------------------------------------
+    # When true, automation pauses (does not open/close trades) while the
+    # exchanges of the traded symbols are closed, and reports why. Ignored for
+    # the synthetic data source (no real market hours). Turn off to trade/test
+    # around the clock on paper.
+    market_hours_enabled: bool = True
+
     # ---- Market data & news (v4/v5) ---------------------------------
     # "saxo"      -> Saxo OpenAPI chart data (default; consistent with execution).
     #                Falls back to synthetic automatically when no token is set.

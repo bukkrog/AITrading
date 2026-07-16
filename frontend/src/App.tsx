@@ -3,7 +3,6 @@ import { api } from "./api";
 import { AlertsPanel } from "./components/AlertsPanel";
 import { Analytics } from "./components/Analytics";
 import { AuditLog } from "./components/AuditLog";
-import { Controls } from "./components/Controls";
 import { EquityChart } from "./components/EquityChart";
 import { MonitoringPanel } from "./components/MonitoringPanel";
 import { OpenOrders } from "./components/OpenOrders";
@@ -13,9 +12,9 @@ import type {
   Alert,
   AuditEntry,
   AutomationInfo,
-  BrokerHealth,
   BrokerModeInfo,
   Config,
+  MarketHours,
   Monitoring,
   Portfolio,
   Signal,
@@ -32,9 +31,9 @@ export function App() {
   const [signals, setSignals] = useState<Signal[]>([]);
   const [audit, setAudit] = useState<AuditEntry[]>([]);
   const [brokerMode, setBrokerMode] = useState<BrokerModeInfo | null>(null);
-  const [brokerHealth, setBrokerHealth] = useState<BrokerHealth | null>(null);
   const [monitoring, setMonitoring] = useState<Monitoring | null>(null);
   const [automation, setAutomation] = useState<AutomationInfo | null>(null);
+  const [marketHours, setMarketHours] = useState<MarketHours | null>(null);
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -63,7 +62,7 @@ export function App() {
       setAutomation(auto);
       setAlerts(al);
       setError(null);
-      api.brokerHealth().then(setBrokerHealth).catch(() => setBrokerHealth(null));
+      api.marketHours().then(setMarketHours).catch(() => setMarketHours(null));
     } catch (e) {
       setError((e as Error).message);
     }
@@ -201,11 +200,8 @@ export function App() {
         {view === "trading" && monitoring && automation && portfolio && brokerMode && (
           <>
             <div className="grid two-col">
-              <div className="controls" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-                <MonitoringPanel monitoring={monitoring} automation={automation} onChanged={refresh} onToast={showToast} />
-                <AlertsPanel alerts={alerts} onChanged={refresh} />
-              </div>
-              <Controls portfolio={portfolio} brokerMode={brokerMode} brokerHealth={brokerHealth} onChanged={refresh} onToast={showToast} />
+              <MonitoringPanel monitoring={monitoring} automation={automation} portfolio={portfolio} marketHours={marketHours} onChanged={refresh} onToast={showToast} />
+              <AlertsPanel alerts={alerts} onChanged={refresh} />
             </div>
             <div className="card section-gap">
               <h2>Live activity</h2>

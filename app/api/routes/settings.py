@@ -42,6 +42,19 @@ class SettingsUpdate(BaseModel):
     # Decision gates
     quant_score_threshold: float | None = None
     news_score_threshold: float | None = None
+    # Exit rules
+    stop_loss_pct: float | None = None
+    take_profit_pct: float | None = None
+    trailing_stop_pct: float | None = None
+    # Risk limits (paper). Applied at runtime to settings.risk.
+    risk_max_open_positions: int | None = None
+    risk_max_position_pct: float | None = None
+    risk_max_total_exposure_pct: float | None = None
+    risk_max_risk_per_trade_pct: float | None = None
+    risk_max_daily_loss_pct: float | None = None
+    risk_max_total_drawdown_pct: float | None = None
+    # Market hours
+    market_hours_enabled: bool | None = None
     # Data & news
     market_data_source: str | None = None
     news_enabled: bool | None = None
@@ -86,6 +99,16 @@ def _view() -> dict:
         "live_trading_enabled": settings.live_trading_enabled,
         "quant_score_threshold": settings.quant_score_threshold,
         "news_score_threshold": settings.news_score_threshold,
+        "stop_loss_pct": settings.stop_loss_pct,
+        "take_profit_pct": settings.take_profit_pct,
+        "trailing_stop_pct": settings.trailing_stop_pct,
+        "risk_max_open_positions": settings.risk.max_open_positions,
+        "risk_max_position_pct": settings.risk.max_position_pct,
+        "risk_max_total_exposure_pct": settings.risk.max_total_exposure_pct,
+        "risk_max_risk_per_trade_pct": settings.risk.max_risk_per_trade_pct,
+        "risk_max_daily_loss_pct": settings.risk.max_daily_loss_pct,
+        "risk_max_total_drawdown_pct": settings.risk.max_total_drawdown_pct,
+        "market_hours_enabled": settings.market_hours_enabled,
         "market_data_source": settings.market_data_source,
         "news_enabled": settings.news_enabled,
         "market_lookback_days": settings.market_lookback_days,
@@ -122,7 +145,11 @@ def get_settings() -> dict:
 def update_settings(update: SettingsUpdate) -> dict:
     changed: list[str] = []
     for key, value in update.model_dump(exclude_unset=True).items():
-        # For secrets, an empty string means "clear"; a value sets it.
-        setattr(settings, key, value if value != "" else None)
+        if key.startswith("risk_"):
+            # Risk limits live on the nested paper RiskConfig (settings.risk).
+            setattr(settings.risk, key[len("risk_"):], value)
+        else:
+            # For secrets, an empty string means "clear"; a value sets it.
+            setattr(settings, key, value if value != "" else None)
         changed.append(key if key not in _SECRETS else f"{key}(secret)")
     return {"updated": changed, "settings": _view()}

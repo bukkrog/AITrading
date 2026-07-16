@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { api } from "../api";
-import type { AutomationInfo, Monitoring } from "../types";
+import type { AutomationInfo, MarketHours, Monitoring, Portfolio } from "../types";
 
 function LimitBar({ label, value, limit, util }: { label: string; value: number; limit: number; util: number }) {
   const cls = util >= 90 ? "hot" : util >= 60 ? "mid" : "";
@@ -18,11 +18,13 @@ function LimitBar({ label, value, limit, util }: { label: string; value: number;
 interface Props {
   monitoring: Monitoring;
   automation: AutomationInfo;
+  portfolio: Portfolio;
+  marketHours: MarketHours | null;
   onChanged: () => void;
   onToast: (m: string) => void;
 }
 
-export function MonitoringPanel({ monitoring, automation, onChanged, onToast }: Props) {
+export function MonitoringPanel({ monitoring, automation, portfolio, marketHours, onChanged, onToast }: Props) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [interval, setIntervalSec] = useState(String(automation.state.interval_seconds));
@@ -69,6 +71,27 @@ export function MonitoringPanel({ monitoring, automation, onChanged, onToast }: 
           {" "}· {a.live_mode ? "LIVE" : "paper"} · {monitoring.automation.runs_count} runs · risk: {monitoring.effective_risk}
         </span>
       </div>
+
+      {marketHours && marketHours.enabled && (
+        <div
+          className="killbar"
+          style={{
+            marginBottom: 12,
+            background: marketHours.paused ? undefined : "transparent",
+            border: "1px solid var(--border)",
+            color: "var(--text)",
+            fontSize: 12,
+          }}
+        >
+          {marketHours.paused ? "⏸ On pause — market closed. " : (marketHours.any_open ? "🟢 Market open. " : "🌙 Market closed. ")}
+          {marketHours.exchanges.map((e) => (
+            <span key={e.key} style={{ marginRight: 10 }}>
+              {e.open ? "🟢" : "🔴"} {e.name} ({e.local_time}, {e.hours})
+              {!e.open && e.next_open_local ? ` · opens ${e.next_open_local}` : ""}
+            </span>
+          ))}
+        </div>
+      )}
 
       <div className="control-row" style={{ marginBottom: 12 }}>
         <label className="field">Interval (sec) {nextRun && <span className="muted">· next run {nextRun}</span>}</label>
@@ -124,6 +147,14 @@ export function MonitoringPanel({ monitoring, automation, onChanged, onToast }: 
             Clear emergency
           </button>
         )}
+        <button
+          className={portfolio.kill_switch_engaged ? "warn" : "danger"}
+          disabled={busy}
+          onClick={() => act(() => api.setKillSwitch(!portfolio.kill_switch_engaged),
+            portfolio.kill_switch_engaged ? "Kill switch released" : "Kill switch engaged")}
+        >
+          {portfolio.kill_switch_engaged ? "Release kill switch" : "Engage kill switch"}
+        </button>
       </div>
       {err && <div className="error">{err}</div>}
     </div>

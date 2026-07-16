@@ -1,6 +1,14 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
-import type { DiscoveryCandidate, SettingsView } from "../types";
+import type { DiscoveryCandidate, DiscoveryStatus, SettingsView } from "../types";
+
+function timeAgo(iso: string | null): string {
+  if (!iso) return "never";
+  const secs = Math.round((Date.now() - new Date(iso).getTime()) / 1000);
+  if (secs < 60) return `${secs}s ago`;
+  if (secs < 3600) return `${Math.round(secs / 60)} min ago`;
+  return `${Math.round(secs / 3600)}h ago`;
+}
 
 function Field({ label, children, hint }: { label: string; children: React.ReactNode; hint?: string }) {
   return (
@@ -18,6 +26,7 @@ export function SettingsMenu({ onChanged, onToast }: { onChanged: () => void; on
   const [secrets, setSecrets] = useState({ anthropic_auth_token: "", anthropic_api_key: "", saxo_access_token: "", saxo_app_secret: "" });
   const [allocation, setAllocationAmt] = useState("100000");
   const [picks, setPicks] = useState<DiscoveryCandidate[]>([]);
+  const [discStatus, setDiscStatus] = useState<DiscoveryStatus | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [saxoResult, setSaxoResult] = useState<string | null>(null);
@@ -38,6 +47,16 @@ export function SettingsMenu({ onChanged, onToast }: { onChanged: () => void; on
         live_trading_enabled: v.live_trading_enabled,
         quant_score_threshold: v.quant_score_threshold,
         news_score_threshold: v.news_score_threshold,
+        stop_loss_pct: v.stop_loss_pct,
+        take_profit_pct: v.take_profit_pct,
+        trailing_stop_pct: v.trailing_stop_pct,
+        risk_max_open_positions: v.risk_max_open_positions,
+        risk_max_position_pct: v.risk_max_position_pct,
+        risk_max_total_exposure_pct: v.risk_max_total_exposure_pct,
+        risk_max_risk_per_trade_pct: v.risk_max_risk_per_trade_pct,
+        risk_max_daily_loss_pct: v.risk_max_daily_loss_pct,
+        risk_max_total_drawdown_pct: v.risk_max_total_drawdown_pct,
+        market_hours_enabled: v.market_hours_enabled,
         market_data_source: v.market_data_source,
         news_enabled: v.news_enabled,
         market_lookback_days: v.market_lookback_days,
@@ -57,7 +76,13 @@ export function SettingsMenu({ onChanged, onToast }: { onChanged: () => void; on
       });
     });
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+    const poll = () => api.discoveryStatus().then(setDiscStatus).catch(() => {});
+    poll();
+    const id = setInterval(poll, 15000);
+    return () => clearInterval(id);
+  }, []);
 
   const set = (k: string, v: unknown) => setForm((f) => ({ ...f, [k]: v }));
 
@@ -209,6 +234,12 @@ export function SettingsMenu({ onChanged, onToast }: { onChanged: () => void; on
               <span>{form.news_enabled ? "on" : "off"}</span>
             </label>
           </Field>
+          <Field label="Pause when market closed" hint="Auto Trading pauses (and says so) while the traded exchanges are closed. Turn off to test around the clock.">
+            <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <input type="checkbox" checked={Boolean(form.market_hours_enabled)} onChange={(e) => set("market_hours_enabled", e.target.checked)} />
+              <span>{form.market_hours_enabled ? "on" : "off"}</span>
+            </label>
+          </Field>
           <Field label="Auto-discover (screener picks the universe)">
             <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
               <input type="checkbox" checked={Boolean(form.discovery_enabled)} onChange={(e) => set("discovery_enabled", e.target.checked)} />
@@ -239,6 +270,13 @@ export function SettingsMenu({ onChanged, onToast }: { onChanged: () => void; on
             <textarea value={String(form.discovery_candidates)} onChange={(e) => set("discovery_candidates", e.target.value)}
               rows={3} style={{ width: "100%", background: "var(--panel-2)", color: "var(--text)", border: "1px solid var(--border)", borderRadius: 8, padding: 8, fontSize: 12 }} />
           </Field>
+          {discStatus && (
+            <div className="muted" style={{ fontSize: 11, marginBottom: 8 }}>
+              Last market scan: <strong>{timeAgo(discStatus.last_scan_at)}</strong>
+              {discStatus.last_scan_at && ` · re-scans at most every ${Math.round(discStatus.ttl_seconds / 60)} min`}
+              {!discStatus.enabled && " · (auto-discover is off)"}
+            </div>
+          )}
           <div className="btn-row">
             <button className="secondary" disabled={busy} onClick={screen}>Screen now</button>
             <button disabled={busy} onClick={applyDisc}>Apply to universe</button>
@@ -253,6 +291,23 @@ export function SettingsMenu({ onChanged, onToast }: { onChanged: () => void; on
           </Field>
           <Field label="News score gate (buy if above)" hint="Default 70. Without AI, news sits ~50 — set to 49 to effectively disable the news gate in paper.">
             <input type="text" value={String(form.news_score_threshold)} onChange={(e) => set("news_score_threshold", Number(e.target.value))} style={{ maxWidth: 90 }} />
+          </Field>
+
+          <h3 style={{ fontSize: 13, marginTop: 14 }}>Exit rules (sell triggers)</h3>
+          <div className="muted" style={{ fontSize: 11, marginBottom: 8 }}>
+            Percent of entry price. 0 = off. On top of the momentum exit (sells when the trend fades). Take-profit turns gains into cash that funds new trades.
+          </div>
+          <Field label="Stop-loss %" hint="Sell if it falls this far below your entry. e.g. 8 = -8%. Caps losses.">
+            <input type="text" value={String((Number(form.stop_loss_pct) * 100).toFixed(2))}
+              onChange={(e) => set("stop_loss_pct", (Number(e.target.value) || 0) / 100)} style={{ maxWidth: 90 }} />
+          </Field>
+          <Field label="Take-profit %" hint="Sell if it rises this far above your entry. e.g. 15 = +15%. Harvests gains.">
+            <input type="text" value={String((Number(form.take_profit_pct) * 100).toFixed(2))}
+              onChange={(e) => set("take_profit_pct", (Number(e.target.value) || 0) / 100)} style={{ maxWidth: 90 }} />
+          </Field>
+          <Field label="Trailing stop %" hint="Sell if it drops this far from its peak since you bought. Locks in gains while letting winners run.">
+            <input type="text" value={String((Number(form.trailing_stop_pct) * 100).toFixed(2))}
+              onChange={(e) => set("trailing_stop_pct", (Number(e.target.value) || 0) / 100)} style={{ maxWidth: 90 }} />
           </Field>
           <Field label="Bar timeframe" hint="Shorter = trades more often (intraday). Daily = calm.">
             <select value={String(form.market_horizon_minutes)} onChange={(e) => set("market_horizon_minutes", Number(e.target.value))}>
@@ -277,6 +332,37 @@ export function SettingsMenu({ onChanged, onToast }: { onChanged: () => void; on
           </Field>
           <Field label="Min trade notional" hint="Skip trades smaller than this (avoids tiny, commission-heavy orders). 0 = off.">
             <input type="text" value={String(form.min_trade_notional)} onChange={(e) => set("min_trade_notional", Number(e.target.value) || 0)} style={{ maxWidth: 110 }} />
+          </Field>
+        </div>
+
+        {/* --- Risk limits (paper) --- */}
+        <div>
+          <h3 style={{ fontSize: 13 }}>Risk limits (how much it trades for)</h3>
+          <div className="muted" style={{ fontSize: 11, marginBottom: 8 }}>
+            Paper limits. Each trade is sized to the smallest of these. Live uses its own tighter limits. Runtime-only — put permanent values in .env (RISK_*).
+          </div>
+          <Field label="Max open positions" hint="How many stocks it may hold at once.">
+            <input type="text" value={String(form.risk_max_open_positions)} onChange={(e) => set("risk_max_open_positions", Number(e.target.value) || 1)} style={{ maxWidth: 90 }} />
+          </Field>
+          <Field label="Max per position %" hint="Biggest single position as % of capital. Default 15%.">
+            <input type="text" value={String((Number(form.risk_max_position_pct) * 100).toFixed(1))}
+              onChange={(e) => set("risk_max_position_pct", (Number(e.target.value) || 0) / 100)} style={{ maxWidth: 90 }} />
+          </Field>
+          <Field label="Max total exposure %" hint="Ceiling on ALL positions combined. Default 40%. Raise to deploy more of your cash.">
+            <input type="text" value={String((Number(form.risk_max_total_exposure_pct) * 100).toFixed(1))}
+              onChange={(e) => set("risk_max_total_exposure_pct", (Number(e.target.value) || 0) / 100)} style={{ maxWidth: 90 }} />
+          </Field>
+          <Field label="Max risk per trade %" hint="How much of capital is risked to the stop on one trade. Default 1%.">
+            <input type="text" value={String((Number(form.risk_max_risk_per_trade_pct) * 100).toFixed(2))}
+              onChange={(e) => set("risk_max_risk_per_trade_pct", (Number(e.target.value) || 0) / 100)} style={{ maxWidth: 90 }} />
+          </Field>
+          <Field label="Daily-loss halt %" hint="Stop all new trades if the day is down this much. Default 2%.">
+            <input type="text" value={String((Number(form.risk_max_daily_loss_pct) * 100).toFixed(1))}
+              onChange={(e) => set("risk_max_daily_loss_pct", (Number(e.target.value) || 0) / 100)} style={{ maxWidth: 90 }} />
+          </Field>
+          <Field label="Max drawdown halt %" hint="Stop all new trades if down this much from the peak. Default 10%.">
+            <input type="text" value={String((Number(form.risk_max_total_drawdown_pct) * 100).toFixed(1))}
+              onChange={(e) => set("risk_max_total_drawdown_pct", (Number(e.target.value) || 0) / 100)} style={{ maxWidth: 90 }} />
           </Field>
         </div>
       </div>

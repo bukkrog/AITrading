@@ -198,6 +198,16 @@ export interface SettingsView {
   live_trading_enabled: boolean;
   quant_score_threshold: number;
   news_score_threshold: number;
+  stop_loss_pct: number;
+  take_profit_pct: number;
+  trailing_stop_pct: number;
+  risk_max_open_positions: number;
+  risk_max_position_pct: number;
+  risk_max_total_exposure_pct: number;
+  risk_max_risk_per_trade_pct: number;
+  risk_max_daily_loss_pct: number;
+  risk_max_total_drawdown_pct: number;
+  market_hours_enabled: boolean;
   market_data_source: string;
   news_enabled: boolean;
   market_lookback_days: number;
@@ -216,6 +226,32 @@ export interface SettingsView {
   automation_universe: string;
   options: Record<string, string[]>;
   persistence: string;
+}
+
+export interface ExchangeStatus {
+  key: string;
+  name: string;
+  open: boolean;
+  local_time: string;
+  hours: string;
+  next_open: string | null;
+  next_open_local: string | null;
+}
+
+export interface MarketHours {
+  any_open: boolean;
+  all_open: boolean;
+  exchanges: ExchangeStatus[];
+  enabled: boolean;
+  paused: boolean;
+}
+
+export interface DiscoveryStatus {
+  last_scan_at: string | null;
+  next_earliest_at: string | null;
+  ttl_seconds: number;
+  sources: string[];
+  enabled: boolean;
 }
 
 export interface DiscoveryCandidate {

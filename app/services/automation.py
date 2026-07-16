@@ -31,6 +31,8 @@ logger = get_logger(__name__)
 
 _thread: threading.Thread | None = None
 _stop = threading.Event()
+# Tracks the last known market-open state so we log only on open<->closed changes.
+_market_was_open: bool | None = None
 
 
 def get_state(session: Session) -> AutomationState:
@@ -97,6 +99,31 @@ def tick(session: Session) -> dict:
                 payload=gate,
             )
             return {"ran": False, "reason": "live_gate_failed", "failed": failed}
+
+    # Pause while the traded exchanges are closed (real data sources only).
+    if settings.market_hours_enabled and settings.market_data_source != "synthetic":
+        from app.services import market_hours
+
+        market = market_hours.status_for_symbols(_universe(state))
+        global _market_was_open
+        if not market["any_open"]:
+            if _market_was_open is not False:  # log the open -> closed transition once
+                closed = ", ".join(e["name"] for e in market["exchanges"])
+                nxt = next((e["next_open_local"] for e in market["exchanges"] if e["next_open_local"]), None)
+                audit_log_service.record(
+                    session, AuditCategory.AUTOMATION, "market_closed",
+                    message=f"Paused — market closed ({closed}). Next open {nxt}.",
+                )
+            _market_was_open = False
+            state.last_run_at = datetime.now(timezone.utc)  # re-check next interval, not every 5s
+            session.flush()
+            return {"ran": False, "reason": "market_closed", "market": market}
+        if _market_was_open is False:  # closed -> open transition
+            audit_log_service.record(
+                session, AuditCategory.AUTOMATION, "market_open",
+                message="Market open — automation resumed.",
+            )
+        _market_was_open = True
 
     try:
         # Optionally let the screener choose what to trade before this cycle.
