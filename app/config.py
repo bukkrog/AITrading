@@ -142,9 +142,11 @@ class Settings(BaseSettings):
     #                       gains into cash so they can fund new trades).
     #   trailing_stop_pct-> sell if price falls this far from its peak since entry
     #                       (lock in gains while letting winners run).
-    stop_loss_pct: float = 0.0
-    take_profit_pct: float = 0.0
-    trailing_stop_pct: float = 0.0
+    # Defaults are the recommended starting values (paper): cut losers at -8%,
+    # harvest winners at +15%, and trail the peak by 10%. Set 0 to disable one.
+    stop_loss_pct: float = 0.08
+    take_profit_pct: float = 0.15
+    trailing_stop_pct: float = 0.10
 
     # ---- Market hours (v8) ------------------------------------------
     # When true, automation pauses (does not open/close trades) while the

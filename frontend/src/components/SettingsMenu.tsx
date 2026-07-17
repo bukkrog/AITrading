@@ -47,15 +47,17 @@ export function SettingsMenu({ onChanged, onToast }: { onChanged: () => void; on
         live_trading_enabled: v.live_trading_enabled,
         quant_score_threshold: v.quant_score_threshold,
         news_score_threshold: v.news_score_threshold,
-        stop_loss_pct: v.stop_loss_pct,
-        take_profit_pct: v.take_profit_pct,
-        trailing_stop_pct: v.trailing_stop_pct,
+        // Percent fields are held as PERCENT in the form (converted to fractions
+        // on save) so the inputs are typeable — see PCT_FIELDS / save().
+        stop_loss_pct: v.stop_loss_pct * 100,
+        take_profit_pct: v.take_profit_pct * 100,
+        trailing_stop_pct: v.trailing_stop_pct * 100,
         risk_max_open_positions: v.risk_max_open_positions,
-        risk_max_position_pct: v.risk_max_position_pct,
-        risk_max_total_exposure_pct: v.risk_max_total_exposure_pct,
-        risk_max_risk_per_trade_pct: v.risk_max_risk_per_trade_pct,
-        risk_max_daily_loss_pct: v.risk_max_daily_loss_pct,
-        risk_max_total_drawdown_pct: v.risk_max_total_drawdown_pct,
+        risk_max_position_pct: v.risk_max_position_pct * 100,
+        risk_max_total_exposure_pct: v.risk_max_total_exposure_pct * 100,
+        risk_max_risk_per_trade_pct: v.risk_max_risk_per_trade_pct * 100,
+        risk_max_daily_loss_pct: v.risk_max_daily_loss_pct * 100,
+        risk_max_total_drawdown_pct: v.risk_max_total_drawdown_pct * 100,
         market_hours_enabled: v.market_hours_enabled,
         market_data_source: v.market_data_source,
         news_enabled: v.news_enabled,
@@ -86,6 +88,13 @@ export function SettingsMenu({ onChanged, onToast }: { onChanged: () => void; on
 
   const set = (k: string, v: unknown) => setForm((f) => ({ ...f, [k]: v }));
 
+  // Fields shown/typed as percent but stored on the backend as fractions.
+  const PCT_FIELDS = [
+    "stop_loss_pct", "take_profit_pct", "trailing_stop_pct",
+    "risk_max_position_pct", "risk_max_total_exposure_pct",
+    "risk_max_risk_per_trade_pct", "risk_max_daily_loss_pct", "risk_max_total_drawdown_pct",
+  ];
+
   async function guard(fn: () => Promise<void>, msg?: string) {
     setBusy(true); setErr(null);
     try { await fn(); if (msg) onToast(msg); onChanged(); }
@@ -96,6 +105,7 @@ export function SettingsMenu({ onChanged, onToast }: { onChanged: () => void; on
   const save = () =>
     guard(async () => {
       const payload: Record<string, unknown> = { ...form };
+      for (const f of PCT_FIELDS) if (payload[f] != null) payload[f] = (Number(payload[f]) || 0) / 100;
       for (const [k, v] of Object.entries(secrets)) if (v.trim()) payload[k] = v.trim();
       await api.updateSettings(payload);
       setSecrets({ anthropic_auth_token: "", anthropic_api_key: "", saxo_access_token: "", saxo_app_secret: "" });
@@ -206,10 +216,10 @@ export function SettingsMenu({ onChanged, onToast }: { onChanged: () => void; on
               ))}
             </ul>
           )}
-          <Field label="Live trading" hint="Stays PAUSED until you connect Saxo and enable this.">
+          <Field label="Live trading (REAL money)" hint="ONLY needed for the 'live' environment. Saxo SIM trades fully WITHOUT this — leave it off while testing. Turning it on arms real-money orders the moment the environment is 'live'.">
             <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
               <input type="checkbox" checked={Boolean(form.live_trading_enabled)} onChange={(e) => set("live_trading_enabled", e.target.checked)} />
-              <span>{form.live_trading_enabled ? "ENABLED" : "disabled (paused)"}</span>
+              <span>{form.live_trading_enabled ? "ENABLED (real money armed)" : "off — SIM still works"}</span>
             </label>
           </Field>
           <Field label="Trading capital (allocation)" hint="Amount the platform trades with. Resets positions.">
@@ -297,17 +307,17 @@ export function SettingsMenu({ onChanged, onToast }: { onChanged: () => void; on
           <div className="muted" style={{ fontSize: 11, marginBottom: 8 }}>
             Percent of entry price. 0 = off. On top of the momentum exit (sells when the trend fades). Take-profit turns gains into cash that funds new trades.
           </div>
-          <Field label="Stop-loss %" hint="Sell if it falls this far below your entry. e.g. 8 = -8%. Caps losses.">
-            <input type="text" value={String((Number(form.stop_loss_pct) * 100).toFixed(2))}
-              onChange={(e) => set("stop_loss_pct", (Number(e.target.value) || 0) / 100)} style={{ maxWidth: 90 }} />
+          <Field label="Stop-loss %" hint="Sell if it falls this far below your entry. e.g. 8 = -8%. Caps losses. 0 = off.">
+            <input type="number" step="0.5" value={String(form.stop_loss_pct ?? "")}
+              onChange={(e) => set("stop_loss_pct", e.target.value === "" ? 0 : Number(e.target.value))} style={{ maxWidth: 90 }} />
           </Field>
-          <Field label="Take-profit %" hint="Sell if it rises this far above your entry. e.g. 15 = +15%. Harvests gains.">
-            <input type="text" value={String((Number(form.take_profit_pct) * 100).toFixed(2))}
-              onChange={(e) => set("take_profit_pct", (Number(e.target.value) || 0) / 100)} style={{ maxWidth: 90 }} />
+          <Field label="Take-profit %" hint="Sell if it rises this far above your entry. e.g. 15 = +15%. Harvests gains. 0 = off.">
+            <input type="number" step="0.5" value={String(form.take_profit_pct ?? "")}
+              onChange={(e) => set("take_profit_pct", e.target.value === "" ? 0 : Number(e.target.value))} style={{ maxWidth: 90 }} />
           </Field>
-          <Field label="Trailing stop %" hint="Sell if it drops this far from its peak since you bought. Locks in gains while letting winners run.">
-            <input type="text" value={String((Number(form.trailing_stop_pct) * 100).toFixed(2))}
-              onChange={(e) => set("trailing_stop_pct", (Number(e.target.value) || 0) / 100)} style={{ maxWidth: 90 }} />
+          <Field label="Trailing stop %" hint="Sell if it drops this far from its peak since you bought. Locks in gains while letting winners run. 0 = off.">
+            <input type="number" step="0.5" value={String(form.trailing_stop_pct ?? "")}
+              onChange={(e) => set("trailing_stop_pct", e.target.value === "" ? 0 : Number(e.target.value))} style={{ maxWidth: 90 }} />
           </Field>
           <Field label="Bar timeframe" hint="Shorter = trades more often (intraday). Daily = calm.">
             <select value={String(form.market_horizon_minutes)} onChange={(e) => set("market_horizon_minutes", Number(e.target.value))}>
@@ -345,24 +355,24 @@ export function SettingsMenu({ onChanged, onToast }: { onChanged: () => void; on
             <input type="text" value={String(form.risk_max_open_positions)} onChange={(e) => set("risk_max_open_positions", Number(e.target.value) || 1)} style={{ maxWidth: 90 }} />
           </Field>
           <Field label="Max per position %" hint="Biggest single position as % of capital. Default 15%.">
-            <input type="text" value={String((Number(form.risk_max_position_pct) * 100).toFixed(1))}
-              onChange={(e) => set("risk_max_position_pct", (Number(e.target.value) || 0) / 100)} style={{ maxWidth: 90 }} />
+            <input type="number" step="0.5" value={String(form.risk_max_position_pct ?? "")}
+              onChange={(e) => set("risk_max_position_pct", e.target.value === "" ? 0 : Number(e.target.value))} style={{ maxWidth: 90 }} />
           </Field>
           <Field label="Max total exposure %" hint="Ceiling on ALL positions combined. Default 40%. Raise to deploy more of your cash.">
-            <input type="text" value={String((Number(form.risk_max_total_exposure_pct) * 100).toFixed(1))}
-              onChange={(e) => set("risk_max_total_exposure_pct", (Number(e.target.value) || 0) / 100)} style={{ maxWidth: 90 }} />
+            <input type="number" step="1" value={String(form.risk_max_total_exposure_pct ?? "")}
+              onChange={(e) => set("risk_max_total_exposure_pct", e.target.value === "" ? 0 : Number(e.target.value))} style={{ maxWidth: 90 }} />
           </Field>
           <Field label="Max risk per trade %" hint="How much of capital is risked to the stop on one trade. Default 1%.">
-            <input type="text" value={String((Number(form.risk_max_risk_per_trade_pct) * 100).toFixed(2))}
-              onChange={(e) => set("risk_max_risk_per_trade_pct", (Number(e.target.value) || 0) / 100)} style={{ maxWidth: 90 }} />
+            <input type="number" step="0.25" value={String(form.risk_max_risk_per_trade_pct ?? "")}
+              onChange={(e) => set("risk_max_risk_per_trade_pct", e.target.value === "" ? 0 : Number(e.target.value))} style={{ maxWidth: 90 }} />
           </Field>
           <Field label="Daily-loss halt %" hint="Stop all new trades if the day is down this much. Default 2%.">
-            <input type="text" value={String((Number(form.risk_max_daily_loss_pct) * 100).toFixed(1))}
-              onChange={(e) => set("risk_max_daily_loss_pct", (Number(e.target.value) || 0) / 100)} style={{ maxWidth: 90 }} />
+            <input type="number" step="0.5" value={String(form.risk_max_daily_loss_pct ?? "")}
+              onChange={(e) => set("risk_max_daily_loss_pct", e.target.value === "" ? 0 : Number(e.target.value))} style={{ maxWidth: 90 }} />
           </Field>
           <Field label="Max drawdown halt %" hint="Stop all new trades if down this much from the peak. Default 10%.">
-            <input type="text" value={String((Number(form.risk_max_total_drawdown_pct) * 100).toFixed(1))}
-              onChange={(e) => set("risk_max_total_drawdown_pct", (Number(e.target.value) || 0) / 100)} style={{ maxWidth: 90 }} />
+            <input type="number" step="1" value={String(form.risk_max_total_drawdown_pct ?? "")}
+              onChange={(e) => set("risk_max_total_drawdown_pct", e.target.value === "" ? 0 : Number(e.target.value))} style={{ maxWidth: 90 }} />
           </Field>
         </div>
       </div>
