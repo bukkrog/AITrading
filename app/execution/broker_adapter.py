@@ -159,14 +159,32 @@ class SaxoBrokerAdapter(BrokerAdapter):
     def resolve_uic(self, symbol: str) -> int:
         if symbol in self._uic_cache:
             return self._uic_cache[symbol]
-        data = self._get(
-            "/ref/v1/instruments",
-            {"Keywords": symbol, "AssetTypes": "Stock"},
-        )
-        matches = [m for m in data.get("Data", []) if m.get("AssetType") == "Stock"]
-        if not matches:
-            raise TradingPlatformError(f"Saxo: no Stock instrument found for '{symbol}'.")
-        chosen = self._choose_instrument(symbol, matches)
+
+        from app.execution.saxo_symbols import choose_by_mic, parse_yahoo_ticker
+
+        parsed = parse_yahoo_ticker(symbol)
+        if parsed:
+            # European (Yahoo-suffixed) ticker: search the base, pick by exchange MIC.
+            base, cls, mic = parsed
+            data = self._get(
+                "/ref/v1/instruments",
+                {"Keywords": base, "AssetTypes": "Stock", "$top": 20},
+            )
+            matches = [m for m in data.get("Data", []) if m.get("AssetType") == "Stock"]
+            chosen = choose_by_mic(matches, mic, cls)
+            if chosen is None:
+                raise TradingPlatformError(
+                    f"Saxo: no {mic} listing found for '{symbol}' (searched '{base}')."
+                )
+        else:
+            data = self._get(
+                "/ref/v1/instruments",
+                {"Keywords": symbol, "AssetTypes": "Stock"},
+            )
+            matches = [m for m in data.get("Data", []) if m.get("AssetType") == "Stock"]
+            if not matches:
+                raise TradingPlatformError(f"Saxo: no Stock instrument found for '{symbol}'.")
+            chosen = self._choose_instrument(symbol, matches)
         uic = int(chosen["Identifier"])
         self._uic_cache[symbol] = uic
         logger.info(

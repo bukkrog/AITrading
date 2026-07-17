@@ -49,3 +49,26 @@ def test_extract_price_variants():
 def test_streaming_url_by_environment():
     assert "sim-streaming.saxobank.com" in _streaming_ws_url("sim")
     assert _streaming_ws_url("live").startswith("wss://streaming.saxobank.com")
+
+
+# ---- European ticker -> Saxo listing mapping -----------------------------
+def test_parse_yahoo_ticker():
+    from app.execution.saxo_symbols import parse_yahoo_ticker
+
+    assert parse_yahoo_ticker("NOVO-B.CO") == ("NOVO", "B", "xcse")
+    assert parse_yahoo_ticker("BAYN.DE") == ("BAYN", None, "xetr")
+    assert parse_yahoo_ticker("MC.PA") == ("MC", None, "xpar")
+    assert parse_yahoo_ticker("AAPL") is None  # plain US ticker -> not EU-suffixed
+
+
+def test_choose_by_mic_prefers_exchange_and_class():
+    from app.execution.saxo_symbols import choose_by_mic
+
+    matches = [
+        {"Symbol": "NOV:xetr", "Identifier": 1},    # wrong exchange
+        {"Symbol": "NOVOb:xcse", "Identifier": 2},  # right exchange + class B
+        {"Symbol": "NOVOa:xcse", "Identifier": 3},  # right exchange, class A
+    ]
+    assert choose_by_mic(matches, "xcse", "B")["Identifier"] == 2
+    assert choose_by_mic(matches, "xcse", None)["Identifier"] == 2  # first on-mic
+    assert choose_by_mic(matches, "xpar", None) is None  # no listing on that mic
