@@ -19,6 +19,8 @@ A 24-hour Developer-Portal token (SIM only) is used as a bearer token via
 from __future__ import annotations
 
 import json
+import threading
+import time
 from abc import ABC, abstractmethod
 
 from app.config import settings
@@ -28,6 +30,23 @@ from app.logging_config import get_logger
 from app.schemas.trading import OrderRequest
 
 logger = get_logger(__name__)
+
+# ---- Saxo order-rate pacing ------------------------------------------------
+# Saxo's trading endpoints are rate-limited more tightly than portfolio reads.
+# Serialise order submissions and keep a minimum gap between them so a cycle
+# with many positions (or a fast strategy like quick-flip) doesn't burst past
+# the limit. Shared across adapter instances.
+_ORDER_MIN_GAP = 0.30  # seconds between order submissions
+_order_lock = threading.Lock()
+_last_order_ts = [0.0]
+
+
+def _pace_order() -> None:
+    with _order_lock:
+        gap = time.monotonic() - _last_order_ts[0]
+        if gap < _ORDER_MIN_GAP:
+            time.sleep(_ORDER_MIN_GAP - gap)
+        _last_order_ts[0] = time.monotonic()
 
 
 class FillResult:
@@ -311,8 +330,17 @@ class SaxoBrokerAdapter(BrokerAdapter):
             "SAXO[%s] %s %s x%.0f (uic=%s)",
             self.environment, payload["BuySell"], symbol, quantity, uic,
         )
+        _pace_order()  # keep a minimum gap between order submissions
         with self._client() as c:
-            resp = c.post("/trade/v2/orders", json=payload)
+            for attempt in range(3):
+                resp = c.post("/trade/v2/orders", json=payload)
+                if resp.status_code == 429 and attempt < 2:
+                    wait = float(resp.headers.get("Retry-After") or (0.8 * (attempt + 1)))
+                    logger.warning("Saxo 429 on order (%s) — retrying in %.1fs", symbol, wait)
+                    time.sleep(min(wait, 5.0))
+                    continue
+                self._check(resp)
+                return resp.json()
             self._check(resp)
             return resp.json()
 
@@ -348,8 +376,17 @@ class SaxoBrokerAdapter(BrokerAdapter):
 
     def cancel_order(self, order_id: str) -> dict:
         account_key, _ = self._ensure_account()
+        _pace_order()
         with self._client() as c:
-            resp = c.delete(f"/trade/v2/orders/{order_id}", params={"AccountKey": account_key})
+            for attempt in range(3):
+                resp = c.delete(f"/trade/v2/orders/{order_id}", params={"AccountKey": account_key})
+                if resp.status_code == 429 and attempt < 2:
+                    wait = float(resp.headers.get("Retry-After") or (0.8 * (attempt + 1)))
+                    logger.warning("Saxo 429 on cancel — retrying in %.1fs", wait)
+                    time.sleep(min(wait, 5.0))
+                    continue
+                self._check(resp)
+                return resp.json()
             self._check(resp)
             return resp.json()
 
