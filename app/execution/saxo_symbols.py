@@ -31,8 +31,9 @@ for _suf, _mic in SUFFIX_MIC.items():
 # Yahoo DHL.DE is Saxo "DPW:xetr" (found via "Deutsche Post"); INGA.AS is
 # "ING:xams" (found via "ING"). Maps the full Yahoo ticker -> a search keyword.
 KEYWORD_OVERRIDES: dict[str, str] = {
-    "DHL.DE": "Deutsche Post",
-    "INGA.AS": "ING",
+    "DHL.DE": "Deutsche Post",  # Saxo DPW:xetr
+    "INGA.AS": "ING",           # Saxo ING:xams
+    "MRK.DE": "Merck KGaA",     # Saxo MRCG:xetr (vs US Merck & Co on "MRK")
 }
 
 
