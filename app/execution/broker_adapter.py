@@ -307,12 +307,19 @@ class SaxoBrokerAdapter(BrokerAdapter):
 
     # ---- Order routing -------------------------------------------------
     def place_market_order(
-        self, symbol: str, side: OrderSide, quantity: float, uic: int | None = None
+        self, symbol: str, side: OrderSide, quantity: float,
+        uic: int | None = None, external_ref: str | None = None,
     ) -> dict:
         """Place a market order and return the raw Saxo response (has OrderId).
 
         Pass ``uic`` to skip symbol resolution (e.g. closing a known position).
+        ``external_ref`` is a client order id (idempotency key): it is constant
+        across the internal 429 retries, and callers pass a deterministic value
+        (e.g. per signal) so an ambiguous timeout + re-submit cannot silently
+        double-fill the same intent (quant audit P1.6).
         """
+        import uuid
+
         account_key, _ = self._ensure_account()
         if uic is None:
             uic = self.resolve_uic(symbol)
@@ -325,6 +332,7 @@ class SaxoBrokerAdapter(BrokerAdapter):
             "OrderType": "Market",
             "ManualOrder": False,
             "OrderDuration": {"DurationType": "DayOrder"},
+            "ExternalReference": (external_ref or f"aitp-{uuid.uuid4().hex[:20]}")[:50],
         }
         logger.info(
             "SAXO[%s] %s %s x%.0f (uic=%s)",
@@ -345,8 +353,11 @@ class SaxoBrokerAdapter(BrokerAdapter):
             return resp.json()
 
     def execute(self, request: OrderRequest, reference_price: float) -> FillResult:
+        # Deterministic client order id per signal: a retried submission of the
+        # same trading intent carries the same reference (idempotency).
+        ref = f"aitp-sig-{request.signal_id}" if request.signal_id else None
         result = self.place_market_order(
-            request.symbol, OrderSide(request.side), request.quantity
+            request.symbol, OrderSide(request.side), request.quantity, external_ref=ref
         )
         order_id = result.get("OrderId")
         # Market orders return only an OrderId; the executed price settles
