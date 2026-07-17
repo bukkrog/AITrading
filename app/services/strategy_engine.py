@@ -215,12 +215,31 @@ def run_cycle(
 
     # ---- Exits first (free up exposure) -------------------------------
     for pos in pipe.portfolio.open_positions():
-        df = get_bars_df(session, pos.symbol)
-        if not len(df):
+        raw_df = get_bars_df(session, pos.symbol)
+        # Reliable current price: the broker's own last price (Saxo) first, then
+        # the cycle price map, then stored bars. Using the broker price avoids a
+        # symbol-key mismatch (Saxo position "GMAB" vs universe "GMAB.CO").
+        price = (
+            float(getattr(pos, "last_price", 0.0) or 0.0)
+            or prices.get(pos.symbol)
+            or (float(raw_df["close"].iloc[-1]) if len(raw_df) else 0.0)
+        )
+        if not price:
             continue
-        price = prices.get(pos.symbol) or float(df["close"].iloc[-1])
-        q = pipe.quant_agent.analyze(pos.symbol, df)
-        reason = _exit_reason(pos, df, price, q.score)
+        # Guard against a STALE same-ticker bar from a different listing (e.g. a
+        # US "GMAB" bar at ~316 vs the Copenhagen GMAB.CO position at ~1845): if
+        # the bars aren't on the same price scale as the position, ignore them so
+        # momentum/trailing exits don't fire on wrong data — only the price-vs-
+        # entry stop-loss / take-profit apply.
+        df = raw_df
+        q_score = 100.0
+        if len(raw_df):
+            last_bar = float(raw_df["close"].iloc[-1])
+            if 0.5 <= (last_bar / price) <= 2.0:
+                q_score = pipe.quant_agent.analyze(pos.symbol, raw_df).score
+            else:
+                df = raw_df.iloc[0:0]  # mismatched scale — don't trust these bars
+        reason = _exit_reason(pos, df, price, q_score)
         if reason:
             assessment = pipe.risk_agent.assess(
                 pos.symbol, OrderSide.SELL, price, prices
