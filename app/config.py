@@ -173,6 +173,10 @@ class Settings(BaseSettings):
     take_profit_pct: float = 0.15
     trailing_stop_pct: float = 0.10
 
+    # Push CRITICAL alerts to this webhook URL (Slack/Discord/Teams/ntfy —
+    # payload carries both "text" and "content"). Unset = UI/audit only.
+    alert_webhook_url: str | None = None
+
     # Market regime engine: classify SPY/VIX into bull/chop/bear/crisis and
     # scale new-position exposure accordingly (crisis blocks new entries).
     regime_enabled: bool = True

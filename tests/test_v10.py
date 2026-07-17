@@ -235,6 +235,24 @@ def test_api_key_guard(monkeypatch):
     assert client.post("/settings", json={}).status_code == 200            # guard off
 
 
+def test_critical_alert_pushes_webhook(session, monkeypatch):
+    import time
+
+    from app.config import settings
+    from app.core.enums import AlertSeverity
+    from app.services import alerts_service
+
+    sent: list[dict] = []
+    monkeypatch.setattr(settings, "alert_webhook_url", "https://hook.test/x")
+    import httpx
+    monkeypatch.setattr(httpx, "post", lambda url, json=None, timeout=None: sent.append({"url": url, **(json or {})}))
+
+    alerts_service.raise_alert(session, "unit", "critical thing", severity=AlertSeverity.CRITICAL)
+    alerts_service.raise_alert(session, "unit2", "just a warning", severity=AlertSeverity.WARNING)
+    time.sleep(0.3)  # daemon thread
+    assert len(sent) == 1 and "critical thing" in sent[0]["text"]  # only CRITICAL pushes
+
+
 def test_insufficient_history_is_neutral():
     tiny = _synthetic_df(5)
     for cls in STRATEGY_REGISTRY.values():

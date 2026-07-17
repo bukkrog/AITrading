@@ -25,6 +25,33 @@ logger = get_logger(__name__)
 _DEDUPE_MINUTES = 30
 
 
+def _push_webhook(kind: str, message: str) -> None:
+    """Fire-and-forget CRITICAL alert to the configured webhook (P3.3).
+
+    Runs on a daemon thread so a slow/dead webhook can never delay a trading
+    tick; failures are logged and swallowed. Payload carries both "text"
+    (Slack/ntfy) and "content" (Discord) so one URL setting fits all.
+    """
+    from app.config import settings
+
+    url = settings.alert_webhook_url
+    if not url:
+        return
+
+    def _send() -> None:
+        try:
+            import httpx
+
+            body = f"🚨 [{kind}] {message}"
+            httpx.post(url, json={"text": body, "content": body}, timeout=5.0)
+        except Exception as exc:  # never let notification failure matter
+            logger.warning("alert webhook failed: %s", exc)
+
+    import threading
+
+    threading.Thread(target=_send, daemon=True).start()
+
+
 def raise_alert(
     session: Session,
     kind: str,
@@ -61,6 +88,8 @@ def raise_alert(
     )
     session.add(alert)
     session.flush()
+    if severity is AlertSeverity.CRITICAL:
+        _push_webhook(kind, message)
     audit_log_service.record(
         session,
         AuditCategory.ALERT,

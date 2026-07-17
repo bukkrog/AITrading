@@ -62,6 +62,7 @@ class SettingsUpdate(BaseModel):
     # Safety
     enforce_loss_halts: bool | None = None
     regime_enabled: bool | None = None
+    alert_webhook_url: str | None = None
     discovery_min_price: float | None = None
     discovery_min_dollar_volume: float | None = None
     # Data & news
@@ -130,6 +131,7 @@ def _view() -> dict:
         "market_hours_enabled": settings.market_hours_enabled,
         "enforce_loss_halts": settings.enforce_loss_halts,
         "regime_enabled": settings.regime_enabled,
+        "alert_webhook_url": settings.alert_webhook_url or "",
         "discovery_min_price": settings.discovery_min_price,
         "discovery_min_dollar_volume": settings.discovery_min_dollar_volume,
         "market_data_source": settings.market_data_source,
