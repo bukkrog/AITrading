@@ -20,9 +20,12 @@ import type {
   StreamingStatus,
 } from "./types";
 
-// Base URL for the API. Override with VITE_API_BASE at build time; defaults to
-// the local FastAPI server started with `uvicorn app.main:app`.
-const BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:8000";
+// Base URL for the API. Override with VITE_API_BASE at build time. Defaults:
+// dev server (port 5173) talks to the local FastAPI on :8000; when the UI is
+// SERVED BY the backend itself (server deployment), use the same origin.
+const BASE =
+  import.meta.env.VITE_API_BASE ??
+  (window.location.port === "5173" ? "http://localhost:8000" : "");
 
 async function get<T>(path: string): Promise<T> {
   const res = await fetch(`${BASE}${path}`);

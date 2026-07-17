@@ -106,6 +106,19 @@ app.include_router(backtest.router)
 app.include_router(discovery.router)
 app.include_router(settings_route.router)
 
+# Serve the built frontend (frontend/dist) from the API itself, so a server
+# deployment is ONE service on ONE port — no nginx/node needed. API routes are
+# registered above and therefore take precedence; this only kicks in when the
+# frontend has been built (`cd frontend && npm run build`).
+from pathlib import Path  # noqa: E402
+
+_dist = Path(__file__).resolve().parent.parent / "frontend" / "dist"
+if _dist.is_dir():
+    from fastapi.staticfiles import StaticFiles  # noqa: E402
+
+    app.mount("/", StaticFiles(directory=str(_dist), html=True), name="ui")
+    logger.info("Serving built frontend from %s", _dist)
+
 
 @app.get("/", tags=["health"])
 def root() -> dict:
