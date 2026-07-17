@@ -43,6 +43,22 @@ def evaluate(
     news = news_agent.analyze(symbol, headlines)
     reference_price = prices.get(symbol, float(df["close"].iloc[-1]) if len(df) else 0.0)
 
+    # Volatility-adaptive stop (Phase 1.4): entry - N x ATR(14). Sizing by risk
+    # then allocates the same equity-at-risk to quiet and volatile names alike.
+    atr_stop: float | None = None
+    if settings.risk.atr_stop_multiple > 0 and reference_price > 0:
+        try:
+            from app.data.indicators import atr as _atr
+
+            if {"high", "low", "close"}.issubset(df.columns) and len(df) >= 15:
+                a = float(_atr(df["high"], df["low"], df["close"], 14).iloc[-1])
+                if a > 0:
+                    candidate = reference_price - settings.risk.atr_stop_multiple * a
+                    if 0 < candidate < reference_price:
+                        atr_stop = candidate
+        except Exception:  # indicator hiccup -> fall back to the fixed % stop
+            atr_stop = None
+
     combined_score = round((quant.score + news.score) / 2.0, 1)
     reasons: list[str] = []
 
@@ -62,12 +78,12 @@ def evaluate(
 
     # Only consult the risk engine when the score gates already pass.
     if quant_ok and news_ok and bullish:
-        risk = risk_agent.assess(symbol, OrderSide.BUY, reference_price, prices)
+        risk = risk_agent.assess(symbol, OrderSide.BUY, reference_price, prices, stop_price=atr_stop)
         if not risk.approved:
             reasons.append(f"Risk veto: {risk.rationale}")
     else:
         # Produce a non-approving assessment placeholder for transparency.
-        risk = risk_agent.assess(symbol, OrderSide.BUY, reference_price, prices)
+        risk = risk_agent.assess(symbol, OrderSide.BUY, reference_price, prices, stop_price=atr_stop)
         if risk.approved:
             reasons.append("Score gates failed; risk assessment shown for context only.")
 

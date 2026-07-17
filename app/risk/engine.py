@@ -139,10 +139,11 @@ class RiskEngine:
         dd_util = drawdown / cfg.max_total_drawdown_pct if cfg.max_total_drawdown_pct else 0.0
         risk_score = round(min(100.0, 100.0 * max(pos_util, exp_util, dd_util)), 1)
 
+        stop_dist_pct = (reference_price - stop_price) / reference_price * 100
         reasons.append(
             f"Approved {qty:.0f} shares (~{notional:.0f} notional); "
             f"binding constraint: {limiting}. Stop @ {stop_price:.2f} "
-            f"(-{cfg.default_stop_loss_pct*100:.0f}%). Post-trade exposure "
+            f"(-{stop_dist_pct:.1f}%). Post-trade exposure "
             f"{exp_util*cfg.max_total_exposure_pct*100:.0f}% of equity."
         )
         return RiskAssessment(

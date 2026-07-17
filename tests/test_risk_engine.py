@@ -22,9 +22,11 @@ def test_buy_sizing_respects_max_position(risk):
     # equity = 100_000; max_position_pct 15% -> 15_000 / 100 = 150 shares.
     # risk-per-trade 1% (1000) / stop distance (5) = 200 shares.
     # -> max_position (150) is the binding constraint.
+    # equity = 100_000; max_position_pct 15% -> 150 shares; risk-per-trade 0.5%
+    # (500) / stop distance (5) = 100 shares -> risk cap binds (risk-equalised).
     a = engine.assess("NOVO", OrderSide.BUY, 100.0, prices)
     assert a.approved
-    assert a.approved_quantity == 150
+    assert a.approved_quantity == 100
     assert a.stop_price == 95.0
 
 

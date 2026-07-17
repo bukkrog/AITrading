@@ -25,7 +25,8 @@ class RiskConfig(BaseSettings):
     # Fraction of total portfolio value allowed in a single position.
     max_position_pct: float = 0.15  # 15 % (spec: 10–20 %)
     # Max fraction of equity risked on a single trade (entry → stop distance).
-    max_risk_per_trade_pct: float = 0.01  # 1 %
+    # 0.5% + ATR-based stops => risk-equalised position sizing (quant audit P1.4).
+    max_risk_per_trade_pct: float = 0.005  # 0.5 %
     # Max fraction of the portfolio deployed across all open positions.
     max_total_exposure_pct: float = 0.95  # deploy almost all capital (paper)
     # Drawdown protection.
@@ -34,6 +35,9 @@ class RiskConfig(BaseSettings):
     # Default stop-loss distance used for position sizing when a strategy
     # does not supply an explicit stop.
     default_stop_loss_pct: float = 0.05  # 5 %
+    # Volatility-adaptive stop: stop = entry - N x ATR(14). Sizing then equalises
+    # risk across quiet and volatile names. 0 falls back to the fixed % above.
+    atr_stop_multiple: float = 2.0
 
     # MVP hard constraints.
     allow_short_selling: bool = False
