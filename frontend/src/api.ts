@@ -11,6 +11,7 @@ import type {
   DiscoveryStatus,
   MarketHours,
   Monitoring,
+  Performance,
   Portfolio,
   Realized,
   SettingsView,
@@ -107,6 +108,7 @@ export const api = {
   positionHistory: (symbol: string) =>
     get<{ symbol: string; base: string; closes: number[] }>(`/portfolio/history?symbol=${encodeURIComponent(symbol)}`),
   realized: () => get<Realized>("/portfolio/realized"),
+  performance: () => get<Performance>("/portfolio/performance"),
   saxoTest: () =>
     get<{ connected: boolean; environment?: string; error?: string; balance?: Record<string, unknown>; account_key?: string }>(
       "/control/saxo-test",

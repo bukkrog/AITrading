@@ -149,37 +149,45 @@ def attribution(session: Session = Depends(get_session)) -> dict:
     }
 
 
-_REALIZED_CACHE: dict = {"ts": 0.0, "data": None}
-_REALIZED_TTL = 30.0  # closed trades change slowly; don't re-pull on every UI poll
+_CLOSED_CACHE: dict = {"ts": 0.0, "rows": None}
+_CLOSED_TTL = 30.0  # closed trades change slowly; don't re-pull on every UI poll
+
+
+def _saxo_closed_trades() -> list[dict]:
+    """Cached raw closed round-trips from Saxo (shared by /realized and /performance)."""
+    import time as _t
+
+    if _CLOSED_CACHE["rows"] is not None and (_t.monotonic() - _CLOSED_CACHE["ts"]) < _CLOSED_TTL:
+        return _CLOSED_CACHE["rows"]
+    from app.core.enums import BrokerMode
+    from app.execution.broker_adapter import build_broker
+
+    rows = build_broker(BrokerMode.SAXO).closed_positions_normalized()
+    _CLOSED_CACHE.update(ts=_t.monotonic(), rows=rows)
+    return rows
 
 
 @router.get("/realized")
 def realized_by_symbol(session: Session = Depends(get_session)) -> dict:
     """Realized (closed-trade) P&L per stock — which names you actually made/lost on."""
-    import time as _t
-
     engine = PortfolioEngine(session)
     if engine.broker_mode.value == "saxo":
-        from app.core.enums import BrokerMode
-        from app.execution.broker_adapter import build_broker
         from app.portfolio.engine import cached_saxo_state
 
-        if _REALIZED_CACHE["data"] is not None and (_t.monotonic() - _REALIZED_CACHE["ts"]) < _REALIZED_TTL:
-            return _REALIZED_CACHE["data"]
         try:
-            adapter = build_broker(BrokerMode.SAXO)
-            rows = adapter.closed_pnl_by_symbol()
-            currency = (cached_saxo_state() or {}).get("currency")  # avoid an extra balance call
+            trades = _saxo_closed_trades()
         except Exception as exc:
             return {"source": "saxo", "error": str(exc)[:200], "per_symbol": [], "total": 0.0}
-        data = {
-            "source": "saxo",
-            "currency": currency,
-            "per_symbol": rows,
-            "total": round(sum(r["realized_pnl"] for r in rows), 2),
-        }
-        _REALIZED_CACHE.update(ts=_t.monotonic(), data=data)
-        return data
+        agg: dict[str, dict] = {}
+        for t in trades:
+            r = agg.setdefault(t["symbol"], {"symbol": t["symbol"], "realized_pnl": 0.0, "trades": 0})
+            r["realized_pnl"] += t["realized_pnl"]
+            r["trades"] += 1
+        rows = sorted(agg.values(), key=lambda x: x["realized_pnl"], reverse=True)
+        for x in rows:
+            x["realized_pnl"] = round(x["realized_pnl"], 2)
+        return {"source": "saxo", "currency": (cached_saxo_state() or {}).get("currency"),
+                "per_symbol": rows, "total": round(sum(r["realized_pnl"] for r in rows), 2)}
     # Paper: realized P&L from the local FIFO attribution.
     positions = engine.positions()
     prices = _prices(session, [p.symbol for p in positions])
@@ -191,6 +199,59 @@ def realized_by_symbol(session: Session = Depends(get_session)) -> dict:
     rows.sort(key=lambda x: x["realized_pnl"], reverse=True)
     return {"source": "paper", "currency": engine.account.base_currency,
             "per_symbol": rows, "total": round(a.total_realized, 2)}
+
+
+@router.get("/performance")
+def performance(session: Session = Depends(get_session)) -> dict:
+    """Top-box summary: trades today + realised P&L for today / week / month."""
+    from datetime import datetime, timedelta, timezone
+
+    engine = PortfolioEngine(session)
+    now = datetime.now(timezone.utc)
+    day0 = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    week0 = day0 - timedelta(days=day0.weekday())  # Monday 00:00 UTC
+    month0 = day0.replace(day=1)
+
+    def _bucket(trades: list[dict]) -> dict:
+        out = {"today": 0.0, "week": 0.0, "month": 0.0}
+        n_today = 0
+        for t in trades:
+            ca = t.get("closed_at")
+            if not ca:
+                continue
+            try:
+                ts = datetime.fromisoformat(ca.replace("Z", "+00:00"))
+            except Exception:
+                continue
+            pnl = t["realized_pnl"]
+            if ts >= month0:
+                out["month"] += pnl
+            if ts >= week0:
+                out["week"] += pnl
+            if ts >= day0:
+                out["today"] += pnl
+                n_today += 1
+        return {"realized": {k: round(v, 2) for k, v in out.items()}, "trades_today": n_today}
+
+    if engine.broker_mode.value == "saxo":
+        from app.portfolio.engine import cached_saxo_state
+
+        try:
+            trades = _saxo_closed_trades()
+        except Exception as exc:
+            return {"source": "saxo", "error": str(exc)[:200]}
+        res = _bucket(trades)
+        st = cached_saxo_state() or {}
+        res.update(source="saxo", currency=st.get("currency"), total_value=round(st.get("total_value") or 0.0, 2))
+        return res
+    # Paper: use fills for trade count + realized attribution (period split not tracked).
+    from app.data.models import Fill
+
+    fills_today = session.scalars(select(Fill).where(Fill.ts >= day0)).all()
+    a = attribution_mod.compute(session, {})
+    return {"source": "paper", "currency": engine.account.base_currency,
+            "trades_today": len(fills_today),
+            "realized": {"today": None, "week": None, "month": round(a.total_realized, 2)}}
 
 
 @router.get("/history")

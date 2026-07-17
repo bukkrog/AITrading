@@ -50,6 +50,15 @@ export interface Realized {
   error?: string;
 }
 
+export interface Performance {
+  source: string;
+  currency?: string;
+  trades_today: number;
+  realized: { today: number | null; week: number | null; month: number | null };
+  total_value?: number;
+  error?: string;
+}
+
 export interface Snapshot {
   ts: string;
   cash: number;

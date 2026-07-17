@@ -21,7 +21,7 @@ class RiskConfig(BaseSettings):
 
     model_config = SettingsConfigDict(env_prefix="RISK_", extra="ignore")
 
-    max_open_positions: int = 5
+    max_open_positions: int = 15
     # Fraction of total portfolio value allowed in a single position.
     max_position_pct: float = 0.15  # 15 % (spec: 10–20 %)
     # Max fraction of equity risked on a single trade (entry → stop distance).

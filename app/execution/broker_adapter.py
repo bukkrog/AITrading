@@ -434,22 +434,33 @@ class SaxoBrokerAdapter(BrokerAdapter):
             )
         return out
 
-    def closed_pnl_by_symbol(self, top: int = 1000) -> list[dict]:
-        """Realized P&L per symbol from closed positions (base currency), best-first."""
+    def closed_positions_normalized(self, top: int = 1000) -> list[dict]:
+        """Closed round-trips: [{symbol, realized_pnl (base), closed_at}], newest first."""
         data = self._get(
             "/port/v1/closedpositions/me",
             {"FieldGroups": "ClosedPosition,DisplayAndFormat", "$top": top},
         )
-        agg: dict[str, dict] = {}
+        out: list[dict] = []
         for r in data.get("Data", []):
             cp = r.get("ClosedPosition", {})
             df = r.get("DisplayAndFormat", {})
-            sym = str(df.get("Symbol") or cp.get("Uic")).split(":")[0]
             pnl = cp.get("ClosedProfitLossInBaseCurrency")
             if pnl is None:
                 pnl = cp.get("ClosedProfitLoss") or 0.0
-            row = agg.setdefault(sym, {"symbol": sym, "realized_pnl": 0.0, "trades": 0})
-            row["realized_pnl"] += float(pnl)
+            out.append({
+                "symbol": str(df.get("Symbol") or cp.get("Uic")).split(":")[0],
+                "realized_pnl": float(pnl),
+                "closed_at": cp.get("ExecutionTimeClose"),
+            })
+        out.sort(key=lambda x: x.get("closed_at") or "", reverse=True)
+        return out
+
+    def closed_pnl_by_symbol(self, top: int = 1000) -> list[dict]:
+        """Realized P&L per symbol from closed positions (base currency), best-first."""
+        agg: dict[str, dict] = {}
+        for t in self.closed_positions_normalized(top):
+            row = agg.setdefault(t["symbol"], {"symbol": t["symbol"], "realized_pnl": 0.0, "trades": 0})
+            row["realized_pnl"] += t["realized_pnl"]
             row["trades"] += 1
         rows = sorted(agg.values(), key=lambda x: x["realized_pnl"], reverse=True)
         for x in rows:

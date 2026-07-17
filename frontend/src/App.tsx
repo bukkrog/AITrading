@@ -19,6 +19,7 @@ import type {
   Config,
   MarketHours,
   Monitoring,
+  Performance,
   Portfolio,
   Realized,
   Signal,
@@ -27,6 +28,10 @@ import type {
 } from "./types";
 
 const fmt = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 0 });
+const pnl = (n: number | null | undefined) =>
+  n == null ? "—" : `${n >= 0 ? "+" : ""}${n.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+const tone = (n: number | null | undefined): "pos" | "neg" | undefined =>
+  n == null ? undefined : n >= 0 ? "pos" : "neg";
 const pct = (n: number) => `${n.toFixed(1)}%`;
 
 export function App() {
@@ -42,6 +47,7 @@ export function App() {
   const [marketHours, setMarketHours] = useState<MarketHours | null>(null);
   const [streaming, setStreaming] = useState<StreamingStatus | null>(null);
   const [realized, setRealized] = useState<Realized | null>(null);
+  const [perf, setPerf] = useState<Performance | null>(null);
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -74,6 +80,7 @@ export function App() {
       api.marketHours().then(setMarketHours).catch(() => setMarketHours(null));
       api.streamingStatus().then(setStreaming).catch(() => setStreaming(null));
       api.realized().then(setRealized).catch(() => setRealized(null));
+      api.performance().then(setPerf).catch(() => setPerf(null));
     } catch (e) {
       setError((e as Error).message);
     }
@@ -161,6 +168,23 @@ export function App() {
                 ● Live Saxo account ({portfolio.currency ?? "SIM"}) — balances &amp; positions from Saxo
               </div>
             )}
+
+            {/* ---- Top box: today's activity + realised P&L by period ---- */}
+            {perf && (
+              <div className="card" style={{ marginBottom: 12 }}>
+                <div className="grid metrics">
+                  <Metric label="Trades today" value={String(perf.trades_today ?? 0)} />
+                  <Metric label={`Gain today${(perf.currency ?? portfolio.currency) ? " (" + (perf.currency ?? portfolio.currency) + ")" : ""}`}
+                    value={pnl(perf.realized.today)} tone={tone(perf.realized.today)} />
+                  <Metric label="Gain this week" value={pnl(perf.realized.week)} tone={tone(perf.realized.week)} />
+                  <Metric label="Gain this month" value={pnl(perf.realized.month)} tone={tone(perf.realized.month)} />
+                </div>
+                <div className="muted" style={{ fontSize: 11, marginTop: 6 }}>
+                  Realised P&amp;L from closed trades{perf.source === "saxo" ? " (Saxo)" : ""}. Open positions' unrealised P&amp;L is in the table below.
+                </div>
+              </div>
+            )}
+
             <div className="grid metrics">
               <Metric label={`Total value (${portfolio.currency ?? config?.base_currency ?? ""})`} value={fmt(portfolio.total_value)} />
               <Metric label="Cash" value={fmt(portfolio.cash)} />
