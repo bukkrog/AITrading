@@ -93,7 +93,8 @@ def screen(session: Session, *, top_n: int | None = None, refresh: bool = True) 
                 momentum=r["roc"],
                 trend_gap=r["trend_gap"] / 100.0,
                 avg_volume=0.0,
-                rationale=f"ROC20={r['roc']}%, trend gap {r['trend_gap']}% "
+                rationale=f"12-1 momentum {r['roc']}%, trend {r['trend_gap']}%, "
+                f"5d {r.get('ret_5d', 0)}%, vol {r.get('ann_vol', 0)}% "
                 f"(sources: {', '.join(sources)}).",
             )
             for r in rows

@@ -196,6 +196,29 @@ def test_walk_forward_produces_oos_folds():
     assert r2.folds == 0
 
 
+def test_factor_score_prefers_steady_uptrend_over_spike():
+    import numpy as np
+    import pandas as pd
+
+    from app.services.universe import _factor_score
+
+    idx = pd.date_range("2024-01-01", periods=260, freq="D")
+    # Steady riser: +40% over the year, calm.
+    steady = pd.Series(np.linspace(100, 140, 260), index=idx)
+    # Spiker: flat all year, +25% in the last 5 days (classic reversal setup).
+    flat = np.full(260, 100.0)
+    flat[-5:] = [105, 110, 115, 120, 125]
+    spike = pd.Series(flat, index=idx)
+    s_steady, f_steady = _factor_score(steady)
+    s_spike, f_spike = _factor_score(spike)
+    assert s_steady > s_spike            # old ROC20 ranking preferred the spike
+    assert f_spike["ret_5d"] > 20        # the spike is what gets penalised
+    # Downtrend scores below neutral.
+    down = pd.Series(np.linspace(140, 100, 260), index=idx)
+    s_down, _ = _factor_score(down)
+    assert s_down < 50
+
+
 def test_insufficient_history_is_neutral():
     tiny = _synthetic_df(5)
     for cls in STRATEGY_REGISTRY.values():

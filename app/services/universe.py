@@ -217,13 +217,54 @@ def gather(source_keys: list[str], max_symbols: int = 100, open_market_only: boo
     return pool
 
 
-def rank_by_momentum(symbols: list[str], top_n: int) -> list[dict]:
-    """Rank ``symbols`` by momentum using one bulk yfinance download.
+def _factor_score(s) -> tuple[float, dict]:
+    """Multi-factor cross-sectional score for one close series (pure; P3.1).
 
-    Score blends 20-bar rate-of-change with an SMA20-vs-SMA50 trend gap.
-    Returns [{symbol, score, roc, trend_gap}] sorted best-first.
+    Replaces the old ROC20 ranking, which systematically bought 1-month
+    spikes at the point where short-term REVERSAL (not continuation) is the
+    statistical expectation. Factors, per the academic evidence:
+      * 12-1 momentum (40%): return over ~1 year SKIPPING the last month —
+        the horizon where momentum actually persists.
+      * trend (25%): SMA20 vs SMA50 gap (medium-term confirmation).
+      * short-term reversal penalty (20%): an extreme 5-day run-up (>10%)
+        is penalised — chasing it is adverse selection.
+      * low volatility (15%): quieter names carry better risk-adjusted returns.
     """
     import numpy as np
+
+    end_idx = -21 if len(s) > 42 else -1
+    base = float(s.iloc[-252]) if len(s) >= 252 else float(s.iloc[0])
+    mom_12_1 = float(s.iloc[end_idx]) / base - 1.0 if base else 0.0
+
+    sma20 = float(s.tail(20).mean())
+    sma50 = float(s.tail(50).mean())
+    trend_gap = (sma20 - sma50) / sma50 if sma50 else 0.0
+
+    ret_5d = float(s.iloc[-1] / s.iloc[-6] - 1.0) if len(s) >= 6 else 0.0
+    daily = s.pct_change().dropna().tail(60)
+    ann_vol = float(daily.std() * np.sqrt(252)) if len(daily) > 10 else 0.35
+
+    mom_c = float(np.clip(mom_12_1 / 0.30, -1, 1))
+    trend_c = float(np.clip(trend_gap / 0.05, -1, 1))
+    rev_c = -float(np.clip((ret_5d - 0.10) / 0.10, 0, 1))  # penalty only
+    vol_c = float(np.clip((0.35 - ann_vol) / 0.25, -1, 1))
+
+    raw = 0.40 * mom_c + 0.25 * trend_c + 0.20 * rev_c + 0.15 * vol_c
+    score = float(np.clip(50 + raw * 50, 0, 100))
+    return score, {
+        "mom_12_1": round(mom_12_1 * 100, 1),
+        "trend_gap": round(trend_gap * 100, 1),
+        "ret_5d": round(ret_5d * 100, 1),
+        "ann_vol": round(ann_vol * 100, 1),
+    }
+
+
+def rank_by_momentum(symbols: list[str], top_n: int) -> list[dict]:
+    """Rank ``symbols`` on the multi-factor score via one bulk yfinance download.
+
+    Returns [{symbol, score, roc, trend_gap, ...factors, returns}] best-first
+    (``roc`` now carries the 12-1 momentum %, kept for API compatibility).
+    """
     import yfinance as yf
 
     from app.config import settings
@@ -231,7 +272,7 @@ def rank_by_momentum(symbols: list[str], top_n: int) -> list[dict]:
     if not symbols:
         return []
     raw = yf.download(
-        symbols, period="4mo", interval="1d", progress=False, auto_adjust=True
+        symbols, period="1y", interval="1d", progress=False, auto_adjust=True
     )
     close = raw["Close"] if "Close" in raw else raw
     vol = raw["Volume"] if "Volume" in raw else None
@@ -257,17 +298,11 @@ def rank_by_momentum(symbols: list[str], top_n: int) -> list[dict]:
                     continue
             except Exception:
                 pass
-        roc = float(s.iloc[-1] / s.iloc[-21] - 1.0) * 100.0
-        sma20 = float(s.tail(20).mean())
-        sma50 = float(s.tail(50).mean())
-        trend_gap = (sma20 - sma50) / sma50 if sma50 else 0.0
-        mom_c = float(np.clip(roc / 10.0, -1, 1))
-        trend_c = float(np.clip(trend_gap / 0.05, -1, 1))
-        score = float(np.clip(50 + (0.6 * mom_c + 0.4 * trend_c) * 50, 0, 100))
+        score, feats = _factor_score(s)
         rets = s.pct_change().dropna().tail(60)
         ranked.append(
-            {"symbol": sym, "score": round(score, 1), "roc": round(roc, 1),
-             "trend_gap": round(trend_gap * 100, 1),
+            {"symbol": sym, "score": round(score, 1),
+             "roc": feats["mom_12_1"], **feats,
              # last 60 daily returns — used by the correlation cap at selection.
              "returns": [round(float(x), 6) for x in rets],}
         )
