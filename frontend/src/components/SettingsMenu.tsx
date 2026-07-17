@@ -49,6 +49,7 @@ export function SettingsMenu({ onChanged, onToast }: { onChanged: () => void; on
         active_strategy: v.active_strategy,
         quant_score_threshold: v.quant_score_threshold,
         news_score_threshold: v.news_score_threshold,
+        news_gate_mode: v.news_gate_mode,
         // Percent fields are held as PERCENT in the form (converted to fractions
         // on save) so the inputs are typeable — see PCT_FIELDS / save().
         stop_loss_pct: v.stop_loss_pct * 100,
@@ -359,9 +360,18 @@ export function SettingsMenu({ onChanged, onToast }: { onChanged: () => void; on
           <Field label="Quant score gate (buy if above)" hint="Default 70. Lower ⇒ trades more often on momentum. Lower to ~60 to see paper activity.">
             <input type="text" value={String(form.quant_score_threshold)} onChange={(e) => set("quant_score_threshold", Number(e.target.value))} style={{ maxWidth: 90 }} />
           </Field>
-          <Field label="News score gate (buy if above)" hint="Default 70. Without AI, news sits ~50 — set to 49 to effectively disable the news gate in paper.">
-            <input type="text" value={String(form.news_score_threshold)} onChange={(e) => set("news_score_threshold", Number(e.target.value))} style={{ maxWidth: 90 }} />
+          <Field label="News mode" hint={form.news_gate_mode === "gate"
+            ? "gate: buys require the news score above the threshold below"
+            : "advisory (recommended): news score is shown on signals but never blocks a buy"}>
+            <select value={String(form.news_gate_mode ?? "advisory")} onChange={(e) => set("news_gate_mode", e.target.value)}>
+              {(opt.news_gate_mode ?? ["advisory", "gate"]).map((o) => <option key={o}>{o}</option>)}
+            </select>
           </Field>
+          {form.news_gate_mode === "gate" && (
+            <Field label="News score gate (buy if above)" hint="Without AI, news sits ~50 — set to 49 to effectively disable.">
+              <input type="text" value={String(form.news_score_threshold)} onChange={(e) => set("news_score_threshold", Number(e.target.value))} style={{ maxWidth: 90 }} />
+            </Field>
+          )}
 
           <h3 style={{ fontSize: 13, marginTop: 14 }}>Exit rules (sell triggers)</h3>
           <div className="muted" style={{ fontSize: 11, marginBottom: 8 }}>

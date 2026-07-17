@@ -225,6 +225,7 @@ export interface SettingsView {
   active_strategy: string;
   quant_score_threshold: number;
   news_score_threshold: number;
+  news_gate_mode: string;
   stop_loss_pct: number;
   take_profit_pct: number;
   trailing_stop_pct: number;
