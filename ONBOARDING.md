@@ -150,14 +150,19 @@ Giv derefter Claude denne kontekst som første besked (kopiér):
 - Live-gatens backtest-Sharpe har selektions-bias (max-af-N) — skal erstattes
 - Lokal fills-log afstemmes ikke mod Saxo (reconciliation mangler)
 
-**NÆSTE: PHASE 1 fra quant-auditten (kapitalbeskyttelse først):**
-1. Pensionér quick-flip fra live-rotation
-2. Hvilende stop/take-profit-ordrer HOS Saxo (beskytter mod gaps/crash)
-3. ATR-baserede stops + risiko-ligestillet sizing (0,5% risiko pr. handel)
-4. News-gate → advisory for tekniske strategier; AI som binær-event-veto
-5. Sektorloft 30% + hævet likviditetsgulv ($20M ADV)
-6. Idempotente ordrer (ExternalReference) + fix live-gate Sharpe-bias
-7. Log point-in-time discovery-valg (grundlag for ægte validering)
+**PHASE 1 GENNEMFØRT (17/7-2026, commits 81eed2a..e6a7c25, 70 tests):**
+1. ✅ Quick-flip pensioneret fra live-rotation (stadig backtestbar)
+2. ✅ Live-gate Sharpe: median over univers (ikke max-af-N) + min. 5 handler
+3. ✅ Sektorloft 30% + likviditetsgulv ($10 / $20M ADV)
+4. ✅ ATR-stops (2×ATR) + risiko-ligestillet sizing (0,5%/handel)
+5. ✅ News-gate → advisory + binær-event-veto (earnings/FDA, event_veto_days=5)
+6. ✅ Idempotente ordrer (ExternalReference, verificeret mod SIM)
+7. ✅ Hvilende stop-ordrer HOS Saxo (StopIfTraded GTC, E2E-verificeret)
+   + point-in-time discovery-log (audit-action "discovery_picks")
 
-Derefter PHASE 2: regime-motor, vol-targeting, walk-forward-validering,
-reconciliation-job. Se den fulde audit i chat-historikken/hukommelsen.
+**NÆSTE: PHASE 2 (institutionel hygiejne):**
+- Regime-motor (bull/bear/chop/crisis → strategi- og eksponeringsvalg)
+- Volatilitets-targeting af porteføljen (10-12% årlig) + korrelationsloft
+- Walk-forward-valideringsharness + deployment-bar (afløser live-gatens backtest)
+- Reconciliation-job (lokale fills ↔ Saxo closed positions, alert ved afvigelse)
+- Gradueret drawdown-nedskalering; realistisk slippage-model i paper-broker
