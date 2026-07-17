@@ -61,6 +61,7 @@ class SettingsUpdate(BaseModel):
     market_hours_enabled: bool | None = None
     # Safety
     enforce_loss_halts: bool | None = None
+    regime_enabled: bool | None = None
     discovery_min_price: float | None = None
     discovery_min_dollar_volume: float | None = None
     # Data & news
@@ -128,6 +129,7 @@ def _view() -> dict:
         "risk_max_total_drawdown_pct": settings.risk.max_total_drawdown_pct,
         "market_hours_enabled": settings.market_hours_enabled,
         "enforce_loss_halts": settings.enforce_loss_halts,
+        "regime_enabled": settings.regime_enabled,
         "discovery_min_price": settings.discovery_min_price,
         "discovery_min_dollar_volume": settings.discovery_min_dollar_volume,
         "market_data_source": settings.market_data_source,

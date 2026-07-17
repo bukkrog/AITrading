@@ -103,6 +103,17 @@ class RiskEngine:
             frac = drawdown / cfg.max_total_drawdown_pct
             if frac > 0.5:
                 dd_scale = max(0.25, 1.0 - (frac - 0.5) * 1.5)
+        # Market-regime scaling (Phase 2.3): shrink new positions in volatile /
+        # bear tape; crisis blocks entries upstream. Fail-safe neutral = 1.0.
+        try:
+            from app.services import regime as _regime
+
+            dd_scale *= _regime.exposure_scale()
+        except Exception:
+            pass
+        if dd_scale <= 0:
+            reasons.append("Regime: crisis — no new entries.")
+            return RiskAssessment(approved=False, risk_score=100.0, reasons=reasons)
 
         qty_risk = rules.position_size_by_risk(
             equity, cfg.max_risk_per_trade_pct * dd_scale, stop_distance
@@ -150,7 +161,7 @@ class RiskEngine:
         risk_score = round(min(100.0, 100.0 * max(pos_util, exp_util, dd_util)), 1)
 
         if dd_scale < 1.0:
-            reasons.append(f"Drawdown de-risking: sizing scaled to {dd_scale*100:.0f}%.")
+            reasons.append(f"De-risking (drawdown/regime): sizing scaled to {dd_scale*100:.0f}%.")
         stop_dist_pct = (reference_price - stop_price) / reference_price * 100
         reasons.append(
             f"Approved {qty:.0f} shares (~{notional:.0f} notional); "

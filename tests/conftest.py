@@ -11,6 +11,19 @@ from app.data import models  # noqa: F401  (register tables on Base.metadata)
 from app.data.models import Fill
 
 
+@pytest.fixture(autouse=True)
+def _hermetic_regime(monkeypatch):
+    """Tests must never depend on the LIVE market regime (network + nondeterminism).
+
+    Force the neutral regime everywhere; the regime unit tests exercise the
+    classifier and the disabled/synthetic paths explicitly.
+    """
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "regime_enabled", False)
+    yield
+
+
 @pytest.fixture
 def session():
     engine = create_engine(

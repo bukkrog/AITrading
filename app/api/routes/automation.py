@@ -94,6 +94,14 @@ def monitoring_status(session: Session = Depends(get_session)) -> dict:
     return monitoring.status(session)
 
 
+@router.get("/regime")
+def market_regime() -> dict:
+    """Current market regime (SPY/VIX) + the exposure policy applied."""
+    from app.services import regime
+
+    return regime.current()
+
+
 @router.get("/market-hours")
 def market_hours_status(session: Session = Depends(get_session)) -> dict:
     """Open/closed status for the exchanges of the current trading universe."""

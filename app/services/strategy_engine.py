@@ -266,6 +266,20 @@ def run_cycle(
                     _order_skip(session, pos.symbol, "exit", exc)
 
     # ---- Entries ------------------------------------------------------
+    # Regime gate (Phase 2.3): in a crisis tape, run exits but open nothing new.
+    try:
+        from app.services import regime as _regime
+
+        _entries_ok = _regime.entries_allowed()
+    except Exception:
+        _entries_ok = True
+    if not _entries_ok:
+        audit_log_service.record(
+            session, AuditCategory.SYSTEM, "regime_block",
+            message="Crisis regime — exits only, no new entries this cycle.",
+        )
+        symbols = []
+
     for sym in symbols:
         df = get_bars_df(session, sym)
         if not len(df):

@@ -169,6 +169,10 @@ class Settings(BaseSettings):
     take_profit_pct: float = 0.15
     trailing_stop_pct: float = 0.10
 
+    # Market regime engine: classify SPY/VIX into bull/chop/bear/crisis and
+    # scale new-position exposure accordingly (crisis blocks new entries).
+    regime_enabled: bool = True
+
     # Enforce the daily-loss / drawdown halts in the risk engine. Turn OFF while
     # testing on SIM so trading isn't stopped and you can observe the strategy.
     # (Kill switch + emergency stop always remain active.)

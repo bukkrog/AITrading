@@ -140,6 +140,31 @@ def test_paper_slippage_scales_with_volatility():
     assert abs(plain.slippage - 100.0 * 5.0 / 10_000.0) < 1e-9
 
 
+def test_regime_classification():
+    from app.services.regime import POLICY, classify_from
+
+    # (spy, sma200, sma50_slope_pct, vix, vix_pctile)
+    assert classify_from(500, 450, 2.0, 14, 0.30) == "bull_quiet"
+    assert classify_from(500, 450, 2.0, 22, 0.70) == "bull_volatile"
+    assert classify_from(500, 450, 0.2, 14, 0.30) == "chop"
+    assert classify_from(430, 450, -1.0, 25, 0.70) == "bear"
+    assert classify_from(430, 450, -1.0, 40, 0.95) == "crisis"
+    assert POLICY["crisis"]["entries_allowed"] is False
+    assert POLICY["crisis"]["exposure_scale"] == 0.0
+
+
+def test_regime_neutral_in_synthetic_mode(monkeypatch):
+    from app.config import settings
+    from app.services import regime
+
+    monkeypatch.setattr(settings, "market_data_source", "synthetic")
+    st = regime.current()
+    assert st["regime"] == "bull_quiet" and st["exposure_scale"] == 1.0
+    monkeypatch.setattr(settings, "regime_enabled", False)
+    monkeypatch.setattr(settings, "market_data_source", "yfinance")
+    assert regime.current()["exposure_scale"] == 1.0  # disabled -> neutral, no network
+
+
 def test_insufficient_history_is_neutral():
     tiny = _synthetic_df(5)
     for cls in STRATEGY_REGISTRY.values():
