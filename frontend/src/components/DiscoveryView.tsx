@@ -64,6 +64,11 @@ export function DiscoveryView() {
           Last scan <strong>{ago(status?.last_scan_at ?? null)}</strong>
           {status?.ttl_seconds ? ` · re-scans ≤ every ${Math.round(status.ttl_seconds / 60)} min` : ""}
         </span>
+        {status?.open_market_only && (
+          <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 12, border: "1px solid var(--border)", background: "var(--panel-2)" }}>
+            🟢 open markets only
+          </span>
+        )}
         <button className="secondary" disabled={busy} onClick={load} style={{ marginLeft: "auto" }}>
           {busy ? "Scanning…" : "Refresh"}
         </button>

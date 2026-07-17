@@ -43,6 +43,7 @@ def test_feed_saxo_returns_empty_without_token(monkeypatch):
 
 def test_discovery_ranks_candidates(session, monkeypatch):
     monkeypatch.setattr(settings, "market_data_source", "synthetic")
+    monkeypatch.setattr(settings, "discovery_sources", "")  # test the static-pool path
     monkeypatch.setattr(settings, "discovery_candidates", "AAA,BBB,CCC,DDD")
     picks = discovery.screen(session, top_n=3, refresh=True)
     assert 1 <= len(picks) <= 3
@@ -54,6 +55,7 @@ def test_discovery_ranks_candidates(session, monkeypatch):
 
 def test_discovery_apply_sets_universe(session, monkeypatch):
     monkeypatch.setattr(settings, "market_data_source", "synthetic")
+    monkeypatch.setattr(settings, "discovery_sources", "")  # test the static-pool path
     monkeypatch.setattr(settings, "discovery_candidates", "AAA,BBB,CCC")
     from app.services import automation
 

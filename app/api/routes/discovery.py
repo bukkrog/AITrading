@@ -38,6 +38,7 @@ def discovery_status() -> dict:
     info = universe.last_scan_info()
     info["sources"] = [s.strip() for s in settings.discovery_sources.split(",") if s.strip()]
     info["enabled"] = settings.discovery_enabled
+    info["open_market_only"] = settings.discovery_open_market_only
     return info
 
 

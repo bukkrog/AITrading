@@ -184,8 +184,12 @@ def available_sources() -> list[str]:
     return list(SOURCES)
 
 
-def gather(source_keys: list[str], max_symbols: int = 100) -> list[str]:
-    """Merge tickers from the given sources, momentum-first, capped."""
+def gather(source_keys: list[str], max_symbols: int = 100, open_market_only: bool = False) -> list[str]:
+    """Merge tickers from the given sources, momentum-first, capped.
+
+    When ``open_market_only`` is set, closed-market names are dropped BEFORE the
+    cap, so they don't consume pool slots and starve names on open exchanges.
+    """
     momentum: list[str] = []
     index: list[str] = []
     for key in source_keys:
@@ -198,6 +202,8 @@ def gather(source_keys: list[str], max_symbols: int = 100) -> list[str]:
         except Exception as exc:  # pragma: no cover - network path
             logger.warning("universe source %s failed: %s", key, exc)
             continue
+        if open_market_only:
+            syms = [s for s in syms if _is_open(s)]
         (momentum if key in _MOMENTUM_KEYS else index).extend(syms)
 
     pool: list[str] = []
@@ -249,16 +255,41 @@ def rank_by_momentum(symbols: list[str], top_n: int) -> list[dict]:
     return ranked[:top_n]
 
 
-def discover(source_keys: list[str], top_n: int, max_symbols: int = 100) -> list[dict]:
-    """Gather + rank, with a short TTL cache to throttle heavy re-screens."""
-    key = (tuple(sorted(source_keys)), top_n, max_symbols)
+def _is_open(symbol: str) -> bool:
+    """Whether ``symbol``'s exchange is trading right now (best-effort)."""
+    try:
+        from app.services import market_hours
+
+        return market_hours.is_open(market_hours.exchange_for_symbol(symbol))
+    except Exception:  # pragma: no cover - never let this drop a candidate wrongly
+        return True
+
+
+def discover(
+    source_keys: list[str],
+    top_n: int,
+    max_symbols: int = 100,
+    open_market_only: bool = False,
+) -> list[dict]:
+    """Gather + rank, with a short TTL cache to throttle heavy re-screens.
+
+    The heavy scan (gather + rank) is cached; the ``open_market_only`` filter and
+    the top-N slice are applied FRESH on every call, so a market opening/closing
+    is reflected immediately without waiting for the cache to expire.
+    """
+    key = (tuple(sorted(source_keys)), max_symbols, open_market_only)
     now = time.monotonic()
     if _CACHE["key"] == key and (now - _CACHE["ts"]) < _CACHE_TTL and _CACHE["ranked"] is not None:
-        return _CACHE["ranked"]
-    pool = gather(source_keys, max_symbols)
-    ranked = rank_by_momentum(pool, top_n)
-    global _LAST_SCAN
-    _LAST_SCAN = datetime.now(timezone.utc)
-    _CACHE.update(key=key, ts=now, ranked=ranked)
-    logger.info("universe.discover: %d candidates -> top %d", len(pool), len(ranked))
-    return ranked
+        ranked_all = _CACHE["ranked"]
+    else:
+        pool = gather(source_keys, max_symbols, open_market_only=open_market_only)
+        ranked_all = rank_by_momentum(pool, len(pool))  # rank the whole pool
+        global _LAST_SCAN
+        _LAST_SCAN = datetime.now(timezone.utc)
+        _CACHE.update(key=key, ts=now, ranked=ranked_all)
+        logger.info("universe.discover: scanned %d candidates (open_only=%s)", len(ranked_all), open_market_only)
+
+    # Re-check open status on the (cached) ranked list too, so a mid-cache
+    # close is reflected without waiting for the next scan.
+    ranked = [r for r in ranked_all if _is_open(r["symbol"])] if open_market_only else ranked_all
+    return ranked[:top_n]

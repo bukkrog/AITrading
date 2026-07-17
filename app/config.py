@@ -203,6 +203,9 @@ class Settings(BaseSettings):
     # Max tickers pulled into the pool before momentum ranking (keeps the bulk
     # download fast; momentum/attention sources are prioritised when capping).
     discovery_max_pool: int = 100
+    # Only pick candidates whose exchange is OPEN right now, so the universe is
+    # always tradable and automation doesn't pause on a closed-market pick.
+    discovery_open_market_only: bool = True
 
     # ---- Automation (v3) --------------------------------------------
     automation_interval_seconds: int = 300

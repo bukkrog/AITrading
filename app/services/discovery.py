@@ -82,7 +82,10 @@ def screen(session: Session, *, top_n: int | None = None, refresh: bool = True) 
     if sources:
         from app.services import universe
 
-        rows = universe.discover(sources, top_n, settings.discovery_max_pool)
+        rows = universe.discover(
+            sources, top_n, settings.discovery_max_pool,
+            open_market_only=settings.discovery_open_market_only,
+        )
         return [
             Candidate(
                 symbol=r["symbol"],

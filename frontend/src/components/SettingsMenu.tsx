@@ -73,6 +73,7 @@ export function SettingsMenu({ onChanged, onToast }: { onChanged: () => void; on
         discovery_candidates: v.discovery_candidates,
         discovery_sources: v.discovery_sources,
         discovery_max_pool: v.discovery_max_pool,
+        discovery_open_market_only: v.discovery_open_market_only,
         automation_interval_seconds: v.automation_interval_seconds,
         automation_universe: v.automation_universe,
       });
@@ -254,6 +255,12 @@ export function SettingsMenu({ onChanged, onToast }: { onChanged: () => void; on
             <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
               <input type="checkbox" checked={Boolean(form.discovery_enabled)} onChange={(e) => set("discovery_enabled", e.target.checked)} />
               <span>{form.discovery_enabled ? "on" : "off"}</span>
+            </label>
+          </Field>
+          <Field label="Only open markets" hint="Discovery only picks stocks whose exchange is open right now, so the universe is always tradable and automation won't pause on a closed-market pick.">
+            <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <input type="checkbox" checked={Boolean(form.discovery_open_market_only)} onChange={(e) => set("discovery_open_market_only", e.target.checked)} />
+              <span>{form.discovery_open_market_only ? "on" : "off"}</span>
             </label>
           </Field>
           <Field label="Momentum sources (scan the market)" hint="Selected sources are gathered, ranked by momentum, and the top N are traded. Overrides the static pool below.">

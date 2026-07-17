@@ -225,6 +225,7 @@ export interface SettingsView {
   discovery_candidates: string;
   discovery_sources: string;
   discovery_max_pool: number;
+  discovery_open_market_only: boolean;
   automation_interval_seconds: number;
   automation_universe: string;
   options: Record<string, string[]>;
@@ -265,6 +266,7 @@ export interface DiscoveryStatus {
   ttl_seconds: number;
   sources: string[];
   enabled: boolean;
+  open_market_only?: boolean;
 }
 
 export interface DiscoveryCandidate {
