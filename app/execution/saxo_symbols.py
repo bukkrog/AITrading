@@ -13,11 +13,26 @@ we deliberately drop it from the keyword and use it only to disambiguate.
 """
 from __future__ import annotations
 
+import re
+
 # Yahoo exchange suffix -> Saxo Symbol MIC (the ``:xxxx`` part of Saxo's Symbol).
 SUFFIX_MIC: dict[str, str] = {
     ".CO": "xcse", ".DE": "xetr", ".PA": "xpar", ".AS": "xams", ".L": "xlon",
     ".MI": "xmil", ".MC": "xmce", ".ST": "xome", ".OL": "xosl", ".HE": "xhel",
     ".SW": "xvtx", ".BR": "xbru", ".LS": "xlis",
+}
+
+# Reverse: Saxo MIC -> Yahoo suffix (first mapping wins for shared MICs).
+MIC_SUFFIX: dict[str, str] = {}
+for _suf, _mic in SUFFIX_MIC.items():
+    MIC_SUFFIX.setdefault(_mic, _suf)
+
+# Names where the Yahoo base doesn't match Saxo's search keyword. Verified on SIM:
+# Yahoo DHL.DE is Saxo "DPW:xetr" (found via "Deutsche Post"); INGA.AS is
+# "ING:xams" (found via "ING"). Maps the full Yahoo ticker -> a search keyword.
+KEYWORD_OVERRIDES: dict[str, str] = {
+    "DHL.DE": "Deutsche Post",
+    "INGA.AS": "ING",
 }
 
 
@@ -32,6 +47,26 @@ def parse_yahoo_ticker(symbol: str) -> tuple[str, str | None, str] | None:
                 base, cls = base.split("-", 1)
             return base, (cls or None), mic
     return None
+
+
+def saxo_to_yahoo(saxo_symbol: str) -> str | None:
+    """Reverse a Saxo Symbol to a Yahoo ticker, e.g. ``NOVOb:xcse`` -> ``NOVO-B.CO``.
+
+    Saxo lowercases the class letter (``NOVOb``, ``CARLb``); we split a trailing
+    lowercase letter off as the class and rebuild the Yahoo form. US listings
+    (no mapped MIC) reduce to the bare base ticker. Best-effort.
+    """
+    if ":" not in (saxo_symbol or ""):
+        return None
+    local, mic = saxo_symbol.split(":", 1)
+    suffix = MIC_SUFFIX.get(mic.lower())
+    m = re.match(r"^([A-Za-z0-9]+?)([a-z])$", local)  # trailing lowercase = class
+    if m and m.group(2):
+        base, cls = m.group(1).upper(), m.group(2).upper()
+        core = f"{base}-{cls}"
+    else:
+        core = local.upper()
+    return f"{core}{suffix}" if suffix else core
 
 
 def choose_by_mic(matches: list[dict], mic: str, cls: str | None) -> dict | None:

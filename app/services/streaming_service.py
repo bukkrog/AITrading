@@ -178,6 +178,17 @@ def stop() -> dict:
     return {"stopped": True}
 
 
+def reauthorize() -> dict:
+    """Refresh the live stream with the current Saxo token (no reconnect)."""
+    if _client is None:
+        return {"reauthorized": False, "error": "Streaming not running."}
+    try:
+        status_code = _client.reauthorize(settings.saxo_access_token)
+        return {"reauthorized": status_code in (200, 202, 204), "status": status_code}
+    except Exception as exc:
+        return {"reauthorized": False, "error": str(exc)}
+
+
 def status() -> dict:
     if _client is None:
         return {"running": False, "stream_exits": _stream_exits[-10:]}

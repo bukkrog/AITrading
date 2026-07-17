@@ -177,7 +177,7 @@ export function App() {
                     {portfolio.positions.map((p) => (
                       <Fragment key={p.symbol}>
                         <tr>
-                          <td>{p.symbol}</td><td>{p.quantity}</td><td>{p.avg_price.toFixed(2)}</td>
+                          <td>{p.symbol.split(":")[0]}</td><td>{p.quantity}</td><td>{p.avg_price.toFixed(2)}</td>
                           <td>{p.last_price.toFixed(2)}</td><td>{fmt(p.market_value)}</td>
                           <td className={p.unrealized_pnl >= 0 ? "pos" : "neg"}>{p.unrealized_pnl.toFixed(2)}</td>
                           <td className={(p.pnl_pct ?? 0) >= 0 ? "pos" : "neg"}>{(p.pnl_pct ?? 0) >= 0 ? "+" : ""}{(p.pnl_pct ?? 0).toFixed(2)}%</td>

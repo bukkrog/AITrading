@@ -104,6 +104,14 @@ def streaming_status() -> dict:
     return streaming_service.status()
 
 
+@router.post("/streaming/reauthorize")
+def streaming_reauthorize() -> dict:
+    """Refresh the running stream with the current Saxo token (after updating it)."""
+    from app.services import streaming_service
+
+    return streaming_service.reauthorize()
+
+
 @router.post("/broker-mode")
 def set_broker_mode(mode: BrokerMode, session: Session = Depends(get_session)) -> dict:
     """Switch between 'simulation' and 'saxo'.

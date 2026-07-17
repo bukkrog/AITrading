@@ -270,6 +270,27 @@ class SaxoStreamingClient:
         """Swap in a refreshed bearer token; used on the next (re)connection."""
         self._token = token
 
+    def reauthorize(self, token: str | None = None) -> int:
+        """Refresh the streaming session's token WITHOUT dropping the connection.
+
+        Saxo: PUT {streaming}/authorize?contextId=... with the new bearer
+        (verified against SIM -> 202 Accepted). Returns the HTTP status.
+        """
+        import httpx
+
+        if token:
+            self._token = token
+        url = _streaming_ws_url(self._environment).replace("/connect", "/authorize")
+        url = url.replace("wss://", "https://")
+        resp = httpx.put(
+            url,
+            params={"contextId": self._context_id},
+            headers={"Authorization": f"Bearer {self._token}"},
+            timeout=15.0,
+        )
+        logger.info("Saxo streaming reauthorize -> %s", resp.status_code)
+        return resp.status_code
+
     def status(self) -> dict:
         return {
             "connected": self.connected,

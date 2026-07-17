@@ -160,15 +160,20 @@ class SaxoBrokerAdapter(BrokerAdapter):
         if symbol in self._uic_cache:
             return self._uic_cache[symbol]
 
-        from app.execution.saxo_symbols import choose_by_mic, parse_yahoo_ticker
+        from app.execution.saxo_symbols import (
+            KEYWORD_OVERRIDES,
+            choose_by_mic,
+            parse_yahoo_ticker,
+        )
 
         parsed = parse_yahoo_ticker(symbol)
         if parsed:
             # European (Yahoo-suffixed) ticker: search the base, pick by exchange MIC.
             base, cls, mic = parsed
+            keyword = KEYWORD_OVERRIDES.get(symbol.upper(), base)
             data = self._get(
                 "/ref/v1/instruments",
-                {"Keywords": base, "AssetTypes": "Stock", "$top": 20},
+                {"Keywords": keyword, "AssetTypes": "Stock", "$top": 30},
             )
             matches = [m for m in data.get("Data", []) if m.get("AssetType") == "Stock"]
             chosen = choose_by_mic(matches, mic, cls)

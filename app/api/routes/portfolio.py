@@ -156,12 +156,30 @@ def position_history(symbol: str, limit: int = 60, session: Session = Depends(ge
     Best-effort: the Saxo display symbol (e.g. ``MAN:xnys``) is reduced to its
     base ticker to look up stored bars. Returns an empty series if none exist.
     """
+    from app.execution.saxo_symbols import saxo_to_yahoo
+
     base = symbol.split(":")[0]
-    df = get_bars_df(session, base)
-    if not len(df):
-        df = get_bars_df(session, symbol)  # fall back to the exact symbol
-    closes = [round(float(c), 4) for c in df["close"].tail(limit)] if len(df) else []
-    return {"symbol": symbol, "base": base, "closes": closes}
+    yahoo = saxo_to_yahoo(symbol)  # e.g. NOVOb:xcse -> NOVO-B.CO
+    # 1) Try stored bars under the base, the reversed Yahoo ticker, or exact symbol.
+    closes: list[float] = []
+    for cand in [c for c in (base, yahoo, symbol) if c]:
+        df = get_bars_df(session, cand)
+        if len(df):
+            closes = [round(float(c), 4) for c in df["close"].tail(limit)]
+            break
+    # 2) Best-effort on-demand fetch (covers held EU names with no stored bars).
+    if not closes:
+        try:
+            import yfinance as yf
+
+            raw = yf.download(yahoo or base, period="4mo", interval="1d",
+                              progress=False, auto_adjust=True)
+            series = raw["Close"] if "Close" in raw else raw
+            vals = series.dropna().tail(limit).tolist()
+            closes = [round(float(v), 4) for v in vals]
+        except Exception:
+            closes = []
+    return {"symbol": symbol, "base": base, "yahoo": yahoo, "closes": closes}
 
 
 @router.get("/snapshots")

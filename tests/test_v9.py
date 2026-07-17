@@ -61,6 +61,17 @@ def test_parse_yahoo_ticker():
     assert parse_yahoo_ticker("AAPL") is None  # plain US ticker -> not EU-suffixed
 
 
+def test_saxo_to_yahoo_reverse_mapping():
+    from app.execution.saxo_symbols import saxo_to_yahoo
+
+    assert saxo_to_yahoo("NOVOb:xcse") == "NOVO-B.CO"
+    assert saxo_to_yahoo("CARLb:xcse") == "CARL-B.CO"
+    assert saxo_to_yahoo("BAYN:xetr") == "BAYN.DE"
+    assert saxo_to_yahoo("MC:xpar") == "MC.PA"
+    assert saxo_to_yahoo("AAPL:xnas") == "AAPL"  # US MIC not mapped -> bare base
+    assert saxo_to_yahoo("NODELIM") is None
+
+
 def test_choose_by_mic_prefers_exchange_and_class():
     from app.execution.saxo_symbols import choose_by_mic
 

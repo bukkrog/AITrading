@@ -13,7 +13,7 @@ export function PositionChart({ symbol, entry }: { symbol: string; entry: number
   }, [symbol]);
 
   if (closes === null) return <div className="muted" style={{ fontSize: 11 }}>loading chart…</div>;
-  if (closes.length < 2) return <div className="muted" style={{ fontSize: 11 }}>no price history for {symbol}</div>;
+  if (closes.length < 2) return <div className="muted" style={{ fontSize: 11 }}>no price history for {symbol.split(":")[0]}</div>;
 
   const W = 320, H = 60, pad = 4;
   const all = [...closes, entry];
