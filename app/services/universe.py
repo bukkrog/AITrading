@@ -272,6 +272,46 @@ def rank_by_momentum(symbols: list[str], top_n: int) -> list[dict]:
     return ranked[:top_n]
 
 
+# Sector lookups are one HTTP call per NEW symbol; cache for the process life
+# (sectors don't change). Unknown/failed lookups are exempt from the cap so a
+# yfinance hiccup can never empty the universe.
+_SECTOR_CACHE: dict[str, str | None] = {}
+
+
+def _sector(symbol: str) -> str | None:
+    if symbol in _SECTOR_CACHE:
+        return _SECTOR_CACHE[symbol]
+    try:
+        import yfinance as yf
+
+        sec = yf.Ticker(symbol).info.get("sector") or None
+    except Exception:
+        sec = None
+    _SECTOR_CACHE[symbol] = sec
+    return sec
+
+
+def _apply_sector_cap(ranked: list[dict], top_n: int, max_pct: float) -> list[dict]:
+    """Pick top-N best-first while capping names per sector (diversification)."""
+    if not (0 < max_pct < 1):
+        return ranked[:top_n]
+    import math
+
+    cap = max(1, math.ceil(top_n * max_pct))
+    out: list[dict] = []
+    counts: dict[str, int] = {}
+    for r in ranked:
+        if len(out) >= top_n:
+            break
+        sec = _sector(r["symbol"])
+        if sec is not None:
+            if counts.get(sec, 0) >= cap:
+                continue  # sector full — skip to the next-best name
+            counts[sec] = counts.get(sec, 0) + 1
+        out.append(r)
+    return out
+
+
 def _is_open(symbol: str) -> bool:
     """Whether ``symbol``'s exchange is trading right now (best-effort)."""
     try:
@@ -309,4 +349,7 @@ def discover(
     # Re-check open status on the (cached) ranked list too, so a mid-cache
     # close is reflected without waiting for the next scan.
     ranked = [r for r in ranked_all if _is_open(r["symbol"])] if open_market_only else ranked_all
-    return ranked[:top_n]
+    # Sector concentration cap (Phase 1 item 3): never let one sector dominate.
+    from app.config import settings
+
+    return _apply_sector_cap(ranked, top_n, settings.discovery_max_sector_pct)

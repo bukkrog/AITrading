@@ -103,6 +103,23 @@ def test_universe_european_sources_gather():
     assert any(t.endswith(".CO") for t in pool)
 
 
+def test_sector_cap_limits_concentration(monkeypatch):
+    from app.services import universe
+
+    sectors = {"A1": "Biotech", "A2": "Biotech", "A3": "Biotech", "A4": "Biotech",
+               "T1": "Tech", "F1": "Finance", "U1": None}
+    monkeypatch.setattr(universe, "_sector", lambda s: sectors.get(s))
+    ranked = [{"symbol": s, "score": 100 - i} for i, s in
+              enumerate(["A1", "A2", "A3", "A4", "T1", "F1", "U1"])]
+    out = universe._apply_sector_cap(ranked, top_n=5, max_pct=0.30)
+    syms = [r["symbol"] for r in out]
+    # ceil(5*0.3)=2 biotech max; unknown sector exempt; next-best fill the rest.
+    assert syms == ["A1", "A2", "T1", "F1", "U1"]
+    # Disabled cap -> plain top-N.
+    assert [r["symbol"] for r in universe._apply_sector_cap(ranked, 5, 0)] == \
+        ["A1", "A2", "A3", "A4", "T1"]
+
+
 def test_set_allocation(session):
     pf = PortfolioEngine(session)
     pf.set_allocation(50_000, reset_positions=True)

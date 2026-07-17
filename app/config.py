@@ -211,8 +211,11 @@ class Settings(BaseSettings):
     )
     # Liquidity filter: skip illiquid / penny names (wide spreads eat fast
     # strategies). Require a minimum last price and average daily $-volume.
-    discovery_min_price: float = 5.0
-    discovery_min_dollar_volume: float = 5_000_000.0
+    discovery_min_price: float = 10.0
+    discovery_min_dollar_volume: float = 20_000_000.0
+    # Sector concentration cap: max fraction of the traded universe from one
+    # sector (prevents e.g. an accidental all-biotech portfolio). 0 disables.
+    discovery_max_sector_pct: float = 0.30
     # Max tickers pulled into the pool before momentum ranking (keeps the bulk
     # download fast; momentum/attention sources are prioritised when capping).
     discovery_max_pool: int = 100
