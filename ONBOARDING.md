@@ -183,4 +183,8 @@ Giv derefter Claude denne kontekst som første besked (kopiér):
 
 **Bevidst udskudt (PHASE 4):** point-in-time-univers-backtests (venter på at
 discovery_picks-loggen modnes), portefølje-niveau vol-targeting (per-position
-inverse-ATR ER på plads), Postgres, filings/insider-AI-pipeline, execution-algos.
+inverse-ATR ER på plads), Postgres, filings/insider-AI-pipeline, execution-algos,
+**ML-ranker** (bruger-prioriteret): træn gradient boosting på discovery_picks-
+loggen (faktorer → realiseret forward-afkast) til at erstatte de håndsatte
+faktorvægte — kræver måneders data (100+ handler / 1000+ scorede kandidater);
+valideres gennem walk-forward-baren før den får lov at ranke live.
