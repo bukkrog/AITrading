@@ -6,9 +6,10 @@ UI; a mail/Teams/Telegram sink can be attached here later.
 """
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.core.enums import AlertSeverity, AuditCategory
@@ -17,6 +18,11 @@ from app.logging_config import get_logger
 from app.services import audit_log_service
 
 logger = get_logger(__name__)
+
+# After an alert of a given kind is raised, suppress re-raising the same kind for
+# this long — even once acknowledged — so persistent conditions (drawdown,
+# degradation) don't immediately flood back after "Acknowledge all".
+_DEDUPE_MINUTES = 30
 
 
 def raise_alert(
@@ -28,14 +34,20 @@ def raise_alert(
     payload: dict[str, Any] | None = None,
     dedupe: bool = True,
 ) -> Alert | None:
-    """Record an alert. When ``dedupe`` is set, an identical unacknowledged
-    alert of the same kind+message is not duplicated."""
+    """Record an alert. When ``dedupe`` is set, skip if an identical alert is
+    still open, OR if any alert of the same kind was raised within the last
+    ``_DEDUPE_MINUTES`` (so acknowledging clears persistent-condition alerts and
+    they don't immediately reappear on the next monitoring cycle)."""
     if dedupe:
+        # Naive UTC to match how SQLite stores timestamps (avoids tz-compare issues).
+        cutoff = (datetime.now(timezone.utc) - timedelta(minutes=_DEDUPE_MINUTES)).replace(tzinfo=None)
         existing = session.scalar(
             select(Alert).where(
                 Alert.kind == kind,
-                Alert.message == message,
-                Alert.acknowledged == False,  # noqa: E712
+                or_(
+                    Alert.ts >= cutoff,  # same kind seen recently (acked or not)
+                    Alert.acknowledged == False,  # noqa: E712  still-open identical kind
+                ),
             )
         )
         if existing is not None:
