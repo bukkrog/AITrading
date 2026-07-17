@@ -94,17 +94,27 @@ class RiskEngine:
             stop_price = rules.stop_price_from_pct(reference_price, cfg.default_stop_loss_pct)
         stop_distance = reference_price - stop_price
 
+        # Graduated drawdown de-risking (Phase 2): as drawdown approaches the
+        # halt limit, shrink new positions instead of trading full size right
+        # up to a binary stop. Full size below 50% of the limit, tapering to
+        # 25% at the limit. Part of the loss-halt regime (off during SIM tests).
+        dd_scale = 1.0
+        if settings.enforce_loss_halts and cfg.max_total_drawdown_pct > 0:
+            frac = drawdown / cfg.max_total_drawdown_pct
+            if frac > 0.5:
+                dd_scale = max(0.25, 1.0 - (frac - 0.5) * 1.5)
+
         qty_risk = rules.position_size_by_risk(
-            equity, cfg.max_risk_per_trade_pct, stop_distance
+            equity, cfg.max_risk_per_trade_pct * dd_scale, stop_distance
         )
         qty_position = rules.position_size_by_notional(
-            equity * cfg.max_position_pct, reference_price
+            equity * cfg.max_position_pct * dd_scale, reference_price
         )
         # No leverage: cannot spend more cash than we hold.
         qty_cash = rules.position_size_by_notional(self.portfolio.cash, reference_price)
         # Total exposure budget remaining.
-        exposure_budget = equity * cfg.max_total_exposure_pct - self.portfolio.positions_value(
-            prices
+        exposure_budget = equity * cfg.max_total_exposure_pct * dd_scale - (
+            self.portfolio.positions_value(prices)
         )
         qty_exposure = rules.position_size_by_notional(max(0.0, exposure_budget), reference_price)
 
@@ -139,6 +149,8 @@ class RiskEngine:
         dd_util = drawdown / cfg.max_total_drawdown_pct if cfg.max_total_drawdown_pct else 0.0
         risk_score = round(min(100.0, 100.0 * max(pos_util, exp_util, dd_util)), 1)
 
+        if dd_scale < 1.0:
+            reasons.append(f"Drawdown de-risking: sizing scaled to {dd_scale*100:.0f}%.")
         stop_dist_pct = (reference_price - stop_price) / reference_price * 100
         reasons.append(
             f"Approved {qty:.0f} shares (~{notional:.0f} notional); "

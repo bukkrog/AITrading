@@ -84,6 +84,20 @@ def test_daily_loss_halts_trading(risk, monkeypatch):
     assert "daily loss" in a.rationale.lower()
 
 
+def test_graduated_drawdown_derisking(risk, monkeypatch):
+    # At 80% of the drawdown limit (8% dd vs 10% limit), sizing shrinks but
+    # trading is NOT halted; scale = 1 - (0.8-0.5)*1.5 = 0.55.
+    monkeypatch.setattr(settings, "enforce_loss_halts", True)
+    engine, pf = risk
+    baseline = engine.assess("NOVO", OrderSide.BUY, 100.0, {"NOVO": 100.0})
+    pf.account.peak_value = settings.initial_cash / (1 - 0.08)  # 8% drawdown
+    pf.session.flush()
+    scaled = engine.assess("NOVO", OrderSide.BUY, 100.0, {"NOVO": 100.0})
+    assert scaled.approved  # still trading — de-risked, not halted
+    assert scaled.approved_quantity < baseline.approved_quantity
+    assert "de-risking" in scaled.rationale.lower()
+
+
 def test_loss_halts_can_be_disabled(risk, monkeypatch):
     # With enforce_loss_halts OFF (e.g. SIM testing), a big drawdown does NOT halt.
     monkeypatch.setattr(settings, "enforce_loss_halts", False)
