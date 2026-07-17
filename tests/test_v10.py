@@ -165,6 +165,21 @@ def test_regime_neutral_in_synthetic_mode(monkeypatch):
     assert regime.current()["exposure_scale"] == 1.0  # disabled -> neutral, no network
 
 
+def test_reconciliation_finds_orphan_sell_orders():
+    from app.services.reconciliation import find_orphan_orders
+
+    positions = [{"uic": 211, "quantity": 10}, {"uic": 300, "quantity": 0}]
+    orders = [
+        {"uic": 211, "order_id": "1", "side": "Sell", "status": "Working", "symbol": "AAPL"},   # covered
+        {"uic": 300, "order_id": "2", "side": "Sell", "status": "Working", "symbol": "GONE"},   # qty 0 -> orphan
+        {"uic": 999, "order_id": "3", "side": "Sell", "status": "Working", "symbol": "GHOST"},  # no pos -> orphan
+        {"uic": 999, "order_id": "4", "side": "Buy", "status": "Working", "symbol": "GHOST"},   # buys exempt
+        {"uic": 998, "order_id": "5", "side": "Sell", "status": "Filled", "symbol": "DONE"},    # not working
+    ]
+    orphans = find_orphan_orders(positions, orders)
+    assert [o["order_id"] for o in orphans] == ["2", "3"]
+
+
 def test_insufficient_history_is_neutral():
     tiny = _synthetic_df(5)
     for cls in STRATEGY_REGISTRY.values():

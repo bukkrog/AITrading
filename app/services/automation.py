@@ -174,6 +174,14 @@ def tick(session: Session) -> dict:
         streaming_service.sync(session)
     except Exception as exc:  # never let streaming break the cycle
         logger.warning("streaming sync failed: %s", exc)
+    # Reconcile broker vs local state (cancels orphan resting stops that would
+    # otherwise short the account when triggered). Uses the cached snapshot.
+    try:
+        from app.services import reconciliation
+
+        reconciliation.run(session)
+    except Exception as exc:  # never let reconciliation break the cycle
+        logger.warning("reconciliation failed: %s", exc)
     state.last_run_at = datetime.now(timezone.utc)
     state.runs_count += 1
     session.flush()
