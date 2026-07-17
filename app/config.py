@@ -119,6 +119,9 @@ class Settings(BaseSettings):
     saxo_environment: Literal["sim", "live"] = "sim"
     saxo_app_key: str | None = None
     saxo_app_secret: str | None = None
+    # OAuth redirect back to THIS server — must match the app's registered
+    # Redirect URL at developer.saxo, e.g. http://10.10.15.144:8000/control/saxo/callback
+    saxo_redirect_uri: str | None = None
     saxo_access_token: str | None = None
     # OAuth endpoints (from the Saxo app registration). Used for the code flow
     # in a later step; the 24h SIM token uses saxo_access_token directly.

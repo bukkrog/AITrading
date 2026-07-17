@@ -13,6 +13,51 @@ from app.portfolio.engine import PortfolioEngine
 router = APIRouter(prefix="/control", tags=["control"])
 
 
+# ---- Saxo OAuth (authorization code flow, SIM/DEMO) ------------------------
+
+
+@router.get("/saxo/login")
+def saxo_oauth_login():
+    """Send the browser to Saxo's login page. Open this URL directly."""
+    from starlette.responses import RedirectResponse
+
+    from app.services import saxo_oauth
+
+    if not saxo_oauth.configured():
+        raise HTTPException(
+            status_code=400,
+            detail="Saxo OAuth not configured — set SAXO_APP_KEY, SAXO_APP_SECRET "
+            "and SAXO_REDIRECT_URI in .env and restart.",
+        )
+    return RedirectResponse(saxo_oauth.auth_url())
+
+
+@router.get("/saxo/callback")
+def saxo_oauth_callback(code: str | None = None, state: str | None = None, error: str | None = None):
+    """Saxo redirects here after login; exchange the code and start auto-refresh."""
+    from starlette.responses import HTMLResponse
+
+    from app.services import saxo_oauth
+
+    if error or not code:
+        return HTMLResponse(f"<h2>✗ Saxo login fejlede</h2><p>{error or 'no code returned'}</p>", status_code=400)
+    try:
+        saxo_oauth.exchange_code(code, state)
+    except Exception as exc:
+        return HTMLResponse(f"<h2>✗ Token-udveksling fejlede</h2><p>{exc}</p>", status_code=400)
+    return HTMLResponse(
+        "<h2>✓ Forbundet til Saxo</h2><p>Sessionen fornyes nu automatisk. "
+        "Du kan lukke denne fane og gå tilbage til platformen.</p>"
+    )
+
+
+@router.get("/saxo/oauth-status")
+def saxo_oauth_status() -> dict:
+    from app.services import saxo_oauth
+
+    return saxo_oauth.status()
+
+
 @router.post("/kill-switch")
 def set_kill_switch(engaged: bool, session: Session = Depends(get_session)) -> dict:
     """Engage or release the kill switch. When engaged, no new trades open."""

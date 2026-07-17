@@ -36,6 +36,7 @@ class SettingsUpdate(BaseModel):
     saxo_app_secret: str | None = None
     saxo_auth_endpoint: str | None = None
     saxo_token_endpoint: str | None = None
+    saxo_redirect_uri: str | None = None
     # Broker / safety
     default_broker_mode: str | None = None
     live_trading_enabled: bool | None = None
@@ -112,6 +113,7 @@ def _view() -> dict:
         "saxo_app_secret": _mask(settings.saxo_app_secret),
         "saxo_auth_endpoint": settings.saxo_auth_endpoint or "",
         "saxo_token_endpoint": settings.saxo_token_endpoint or "",
+        "saxo_redirect_uri": settings.saxo_redirect_uri or "",
         "default_broker_mode": settings.default_broker_mode,
         "live_trading_enabled": settings.live_trading_enabled,
         "active_strategy": settings.active_strategy,

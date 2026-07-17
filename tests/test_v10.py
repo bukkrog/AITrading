@@ -268,6 +268,48 @@ def test_pead_adjustment_reorders_without_mutating_cache():
     assert out[0]["pead_surprise"] == 9.0
 
 
+def test_saxo_oauth_flow(monkeypatch, tmp_path):
+    from app.config import settings
+    from app.services import saxo_oauth
+
+    monkeypatch.setattr(settings, "saxo_app_key", "appkey")
+    monkeypatch.setattr(settings, "saxo_app_secret", "shh")
+    monkeypatch.setattr(settings, "saxo_redirect_uri", "http://x:8000/control/saxo/callback")
+    monkeypatch.setattr(saxo_oauth, "_TOKEN_FILE", tmp_path / "saxo_oauth.json")
+    monkeypatch.setattr(saxo_oauth, "_ensure_refresh_thread", lambda: None)  # no threads in tests
+    assert saxo_oauth.configured()
+
+    url = saxo_oauth.auth_url()
+    assert url.startswith("https://sim.logonvalidation.net/authorize?")
+    assert "client_id=appkey" in url
+    state = saxo_oauth._STATE["pending_state"]
+
+    calls: list[dict] = []
+    def fake_token_request(data):
+        calls.append(data)
+        return {"access_token": "AT-1", "refresh_token": "RT-1", "expires_in": 1200}
+    monkeypatch.setattr(saxo_oauth, "_token_request", fake_token_request)
+
+    # Wrong state is rejected (CSRF); right state exchanges and activates token.
+    import pytest as _pytest
+    with _pytest.raises(ValueError):
+        saxo_oauth.exchange_code("thecode", "wrong-state")
+    url = saxo_oauth.auth_url()
+    state = saxo_oauth._STATE["pending_state"]
+    saxo_oauth.exchange_code("thecode", state)
+    assert settings.saxo_access_token == "AT-1"
+    assert calls[-1]["grant_type"] == "authorization_code"
+
+    # Refresh + persisted file lets resume() restore the session.
+    assert saxo_oauth.refresh_now()
+    assert calls[-1]["grant_type"] == "refresh_token"
+    st = saxo_oauth.status()
+    assert st["connected"] and st["environment"] == "sim"
+    saxo_oauth._STATE["refresh_token"] = None
+    assert saxo_oauth.resume()
+    assert saxo_oauth._STATE["refresh_token"] == "RT-1"
+
+
 def test_insufficient_history_is_neutral():
     tiny = _synthetic_df(5)
     for cls in STRATEGY_REGISTRY.values():

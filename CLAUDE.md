@@ -121,6 +121,9 @@ Key modules under `app/`:
   orders don't change the Saxo balance), so it can deploy up to
   `max_open_positions × max_position_pct`. Robust fix: track committed cash per
   cycle with currency conversion.
-- OAuth code-flow (auto-refresh of the Saxo token) not built yet.
+- Saxo OAuth code-flow IS built (`app/services/saxo_oauth.py`; sim/demo apps):
+  `/control/saxo/login` → callback → auto-refresh daemon; refresh token
+  persisted in git-ignored `saxo_oauth.json`. Live still requires a
+  Saxo-approved live application.
 - Strategy/screener parameters are code-level; making them Setup-configurable and
   backtest-tuning defaults is a planned refinement.

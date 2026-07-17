@@ -30,6 +30,7 @@ export function SettingsMenu({ onChanged, onToast }: { onChanged: () => void; on
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [saxoResult, setSaxoResult] = useState<string | null>(null);
+  const [oauth, setOauth] = useState<{ configured: boolean; connected: boolean; environment: string } | null>(null);
   const [testSymbol, setTestSymbol] = useState("AAPL");
   const [selfTest, setSelfTest] = useState<{ ok: boolean; placed_order: boolean; steps: { name: string; ok: boolean; detail?: unknown; error?: string }[] } | null>(null);
 
@@ -83,11 +84,21 @@ export function SettingsMenu({ onChanged, onToast }: { onChanged: () => void; on
 
   useEffect(() => {
     load();
-    const poll = () => api.discoveryStatus().then(setDiscStatus).catch(() => {});
+    const poll = () => {
+      api.discoveryStatus().then(setDiscStatus).catch(() => {});
+      api.saxoOauthStatus().then(setOauth).catch(() => {});
+    };
     poll();
     const id = setInterval(poll, 15000);
     return () => clearInterval(id);
   }, []);
+
+  // Opens Saxo's login in a new tab; the callback lands on the backend, which
+  // then keeps the session alive with the refresh token. Status poll picks it up.
+  const saxoLogin = () => {
+    if (!oauth?.configured) { setErr("Gem App key, App secret og Redirect URL først (Save first)."); return; }
+    window.open(api.saxoLoginUrl(), "_blank");
+  };
 
   const set = (k: string, v: unknown) => setForm((f) => ({ ...f, [k]: v }));
 
@@ -209,20 +220,28 @@ export function SettingsMenu({ onChanged, onToast }: { onChanged: () => void; on
           <Field label="App key" hint="from your Saxo app registration">
             <input type="text" value={String(form.saxo_app_key ?? "")} onChange={(e) => set("saxo_app_key", e.target.value)} />
           </Field>
-          <Field label="App secret" hint={s.saxo_app_secret.set ? `saved ${s.saxo_app_secret.hint}` : "for the OAuth code flow (later)"}>
+          <Field label="App secret" hint={s.saxo_app_secret.set ? `saved ${s.saxo_app_secret.hint}` : "for the OAuth login below"}>
             <input type="password" placeholder="app secret" value={secrets.saxo_app_secret}
               onChange={(e) => setSecrets((x) => ({ ...x, saxo_app_secret: e.target.value }))} />
           </Field>
-          <Field label="Authorization endpoint">
-            <input type="text" value={String(form.saxo_auth_endpoint ?? "")} onChange={(e) => set("saxo_auth_endpoint", e.target.value)} />
-          </Field>
-          <Field label="Token endpoint">
-            <input type="text" value={String(form.saxo_token_endpoint ?? "")} onChange={(e) => set("saxo_token_endpoint", e.target.value)} />
+          <Field label="Redirect URL" hint="must ALSO be registered on your app at developer.saxo">
+            <input type="text" placeholder="http://<server-ip>:8000/control/saxo/callback"
+              value={String(form.saxo_redirect_uri ?? "")} onChange={(e) => set("saxo_redirect_uri", e.target.value)} />
           </Field>
           <div className="btn-row">
             <button className="secondary" disabled={busy} onClick={save}>Save first</button>
             <button className="secondary" disabled={busy} onClick={testSaxo}>Test Saxo connection</button>
+            <button disabled={busy} onClick={saxoLogin}>Log ind hos Saxo (OAuth)</button>
           </div>
+          {oauth && (
+            <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
+              {oauth.connected
+                ? `✓ OAuth-session aktiv (${oauth.environment}) — fornyes automatisk`
+                : oauth.configured
+                  ? "OAuth klar — klik 'Log ind hos Saxo'"
+                  : "OAuth: udfyld App key, App secret og Redirect URL, og gem"}
+            </div>
+          )}
           {saxoResult && <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>{saxoResult}</div>}
 
           <Field label="Verify full trading path" hint="account → balance → instrument → quote → daily bars (read-only). The order button places a real 1-share SIM buy.">

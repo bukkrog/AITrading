@@ -125,6 +125,11 @@ export const api = {
     ),
   cancelSaxoOrder: (orderId?: string) =>
     post<{ cancelled: string[] }>(`/control/saxo-cancel${orderId ? `?order_id=${orderId}` : ""}`),
+  saxoOauthStatus: () =>
+    get<{ configured: boolean; connected: boolean; access_token_expires_in: number; environment: string }>(
+      "/control/saxo/oauth-status",
+    ),
+  saxoLoginUrl: () => `${BASE || window.location.origin}/control/saxo/login`,
   saxoSelfTest: (symbol: string, placeOrder = false, quantity = 1) =>
     get<{ ok: boolean; symbol: string; placed_order: boolean; steps: { name: string; ok: boolean; detail?: unknown; error?: string }[] }>(
       `/control/saxo-selftest?symbol=${encodeURIComponent(symbol)}&place_order=${placeOrder}&quantity=${quantity}`,

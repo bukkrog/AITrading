@@ -64,7 +64,18 @@ API_KEY=vaelg-en-lang-tilfaeldig-noegle
 # ALERT_WEBHOOK_URL=https://...
 # Valgfrit: persistér Saxo-token på tværs af genstarter
 # SAXO_ACCESS_TOKEN=...
+
+# Anbefalet: Saxo OAuth (DEMO-app fra developer.saxo) — så slipper du for 24h-tokens.
+# Registrér Redirect URL'en på appen under developer.saxo -> Application Management!
+SAXO_APP_KEY=din-app-key
+SAXO_APP_SECRET=din-app-secret
+SAXO_REDIRECT_URI=http://<VM-IP>:8000/control/saxo/callback
 ```
+
+**Saxo OAuth (engangs-login i stedet for dagligt token):** udfyld de tre
+SAXO_*-felter ovenfor (eller i Setup-siden), genstart, og klik **"Log ind hos
+Saxo (OAuth)"** i Setup → log ind → sessionen fornyes herefter automatisk og
+overlever genstarter (refresh-token gemmes i `saxo_oauth.json`, git-ignored).
 
 I browseren (én gang, F12 → Console) så UI'et sender nøglen:
 `localStorage.setItem("aitp_api_key", "vaelg-en-lang-tilfaeldig-noegle")`
