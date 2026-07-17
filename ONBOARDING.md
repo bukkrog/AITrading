@@ -160,9 +160,20 @@ Giv derefter Claude denne kontekst som første besked (kopiér):
 7. ✅ Hvilende stop-ordrer HOS Saxo (StopIfTraded GTC, E2E-verificeret)
    + point-in-time discovery-log (audit-action "discovery_picks")
 
-**NÆSTE: PHASE 2 (institutionel hygiejne):**
-- Regime-motor (bull/bear/chop/crisis → strategi- og eksponeringsvalg)
-- Volatilitets-targeting af porteføljen (10-12% årlig) + korrelationsloft
-- Walk-forward-valideringsharness + deployment-bar (afløser live-gatens backtest)
-- Reconciliation-job (lokale fills ↔ Saxo closed positions, alert ved afvigelse)
-- Gradueret drawdown-nedskalering; realistisk slippage-model i paper-broker
+**PHASE 2 GENNEMFØRT (17/7-2026, commits 81bcd4c..b50ee86, 77 tests):**
+1. ✅ Volatilitets-bevidst slippage i paper-brokeren (ATR-afledt, cap 1%)
+2. ✅ Gradueret drawdown-nedskalering (fuld str. <50% af grænsen → 25% ved grænsen)
+3. ✅ Regime-motor: SPY/VIX → bull_quiet/bull_volatile/chop/bear/crisis →
+   eksponerings-skala (1.0/0.6/0.5/0.25/0.0); crisis = kun exits.
+   GET /automation/regime · regime_enabled-setting · fail-safe neutral
+4. ✅ Reconciliation hvert tick: forældreløse hvilende SELL-stops (ville shorte
+   ved trigger) annulleres + alertes — bruger cached snapshot, 0 ekstra API-kald
+5. ✅ Korrelationsloft i discovery (>0,70 mod valgte navne → spring til næste)
+6. ✅ Walk-forward-harness + deployment-bar: OOS Sharpe ≥0,8, ≥3 folds, ≥50%
+   positive folds, maxDD >-20%. GET /backtest/walk-forward?symbol=&strategy=
+
+**Bevidst udskudt til PHASE 3:** portefølje-niveau vol-targeting (inverse-ATR-
+sizing pr. position ER implementeret via ATR-stops + 0,5% risiko; helporteføljens
+vol-skalering afventer ren snapshot-historik), point-in-time-univers-backtests
+(kræver at discovery_picks-loggen modnes), multi-faktor-ranker, PEAD/earnings-
+drift, Postgres + API-auth + ekstern alerting.
