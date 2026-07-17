@@ -131,7 +131,8 @@ def _view() -> dict:
             "default_broker_mode": ["simulation", "saxo"],
             "market_data_source": ["synthetic", "yfinance", "saxo"],
             "discovery_sources": [
-                "day_gainers", "most_actives", "wsb", "sp500", "dow30",
+                "day_gainers", "most_actives", "small_cap_gainers",
+                "aggressive_small_caps", "growth_tech", "wsb", "sp500", "dow30",
                 "omxc25", "dax", "cac", "europe",
             ],
         },

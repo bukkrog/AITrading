@@ -261,7 +261,7 @@ export function SettingsMenu({ onChanged, onToast }: { onChanged: () => void; on
               {(opt.discovery_sources ?? []).map((src) => {
                 const cur = String(form.discovery_sources || "").split(",").map((x) => x.trim()).filter(Boolean);
                 const on = cur.includes(src);
-                const label = { day_gainers: "Top gainers", most_actives: "Most active", wsb: "WallStreetBets", sp500: "S&P 500", dow30: "Dow 30", omxc25: "OMX C25 (DK)", dax: "DAX (DE)", cac: "CAC 40 (FR)", europe: "Europe (mixed)" }[src] ?? src;
+                const label = { day_gainers: "Top gainers", most_actives: "Most active", small_cap_gainers: "Small-cap gainers", aggressive_small_caps: "Aggressive small caps", growth_tech: "Growth tech", wsb: "WallStreetBets", sp500: "S&P 500", dow30: "Dow 30", omxc25: "OMX C25 (DK)", dax: "DAX (DE)", cac: "CAC 40 (FR)", europe: "Europe (mixed)" }[src] ?? src;
                 return (
                   <label key={src} style={{ display: "flex", gap: 5, alignItems: "center", fontSize: 12 }}>
                     <input type="checkbox" checked={on} onChange={(e) => {

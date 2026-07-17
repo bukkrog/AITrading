@@ -3,6 +3,7 @@ import { api } from "./api";
 import { AlertsPanel } from "./components/AlertsPanel";
 import { Analytics } from "./components/Analytics";
 import { AuditLog } from "./components/AuditLog";
+import { DiscoveryView } from "./components/DiscoveryView";
 import { EquityChart } from "./components/EquityChart";
 import { MonitoringPanel } from "./components/MonitoringPanel";
 import { OpenOrders } from "./components/OpenOrders";
@@ -266,6 +267,9 @@ export function App() {
             </div>
           </>
         )}
+
+        {/* ---- Discovery (live market scan) ---- */}
+        {view === "discovery" && <DiscoveryView />}
 
         {/* ---- Analytics ---- */}
         {view === "analytics" && <Analytics universe={universe} />}

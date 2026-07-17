@@ -27,7 +27,7 @@ class RiskConfig(BaseSettings):
     # Max fraction of equity risked on a single trade (entry → stop distance).
     max_risk_per_trade_pct: float = 0.01  # 1 %
     # Max fraction of the portfolio deployed across all open positions.
-    max_total_exposure_pct: float = 0.40  # 40 % (spec: 30–50 % in MVP)
+    max_total_exposure_pct: float = 0.95  # deploy almost all capital (paper)
     # Drawdown protection.
     max_daily_loss_pct: float = 0.02  # 2 % intraday -> halt new trades
     max_total_drawdown_pct: float = 0.10  # 10 % peak-to-trough -> halt
@@ -195,8 +195,11 @@ class Settings(BaseSettings):
     )
     # Dynamic universe sources (v7). When non-empty, the screener gathers tickers
     # from these instead of the static candidate list, ranks them by momentum,
-    # and trades the top N. Keys: sp500, dow30, day_gainers, most_actives, wsb.
-    discovery_sources: str = ""
+    # and trades the top N. Default: ALL sources on (US + EU, all market caps).
+    discovery_sources: str = (
+        "day_gainers,most_actives,small_cap_gainers,aggressive_small_caps,"
+        "growth_tech,wsb,sp500,dow30,omxc25,dax,cac,europe"
+    )
     # Max tickers pulled into the pool before momentum ranking (keeps the bulk
     # download fast; momentum/attention sources are prioritised when capping).
     discovery_max_pool: int = 100

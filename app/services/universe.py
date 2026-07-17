@@ -30,8 +30,13 @@ _DOW30 = [
     "NKE", "NVDA", "PG", "SHW", "TRV", "UNH", "V", "VZ", "WMT", "AMZN",
 ]
 
-# Momentum/attention sources are ranked first when capping the pool.
-_MOMENTUM_KEYS = ("day_gainers", "most_actives", "wsb")
+# Momentum/attention sources are ranked first when capping the pool. Spans caps:
+# day_gainers/most_actives (all caps), small_cap_gainers/aggressive_small_caps
+# (small cap), growth_tech (mid/large growth), wsb (retail attention).
+_MOMENTUM_KEYS = (
+    "day_gainers", "most_actives", "small_cap_gainers", "aggressive_small_caps",
+    "growth_tech", "wsb",
+)
 
 # ---- European index constituents (curated subsets, Yahoo-suffixed tickers) --
 # Scored on yfinance like everything else. NOTE: these are curated large-cap
@@ -162,6 +167,10 @@ SOURCES = {
     "dow30": _dow30,
     "day_gainers": lambda: _yahoo_screen("day_gainers"),
     "most_actives": lambda: _yahoo_screen("most_actives"),
+    # Broader cap coverage: small-cap and growth movers.
+    "small_cap_gainers": lambda: _yahoo_screen("small_cap_gainers"),
+    "aggressive_small_caps": lambda: _yahoo_screen("aggressive_small_caps"),
+    "growth_tech": lambda: _yahoo_screen("growth_technology_stocks"),
     "wsb": _wsb,
     # European markets (curated large-cap subsets).
     "omxc25": lambda: list(_OMXC25),

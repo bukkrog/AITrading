@@ -2,11 +2,12 @@ import { useState } from "react";
 import { api } from "../api";
 import type { AutomationInfo, Monitoring } from "../types";
 
-export type View = "dashboard" | "trading" | "analytics" | "setup" | "audit";
+export type View = "dashboard" | "trading" | "discovery" | "analytics" | "setup" | "audit";
 
 const NAV: { id: View; label: string; icon: string }[] = [
   { id: "dashboard", label: "Dashboard", icon: "📊" },
   { id: "trading", label: "Auto Trading", icon: "🤖" },
+  { id: "discovery", label: "Discovery", icon: "🔭" },
   { id: "analytics", label: "Analytics", icon: "📈" },
   { id: "setup", label: "Setup", icon: "⚙" },
   { id: "audit", label: "Audit log", icon: "📜" },
