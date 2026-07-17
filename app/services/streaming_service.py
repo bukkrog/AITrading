@@ -27,6 +27,35 @@ _entries: dict[str, float] = {}   # symbol -> avg/entry price (cached at start)
 _peaks: dict[str, float] = {}     # symbol -> highest streamed price since start
 _exited: set[str] = set()         # symbols already auto-exited (re-armed on restart)
 _stream_exits: list[dict] = []    # audit trail for the UI/status
+_last_desired: set[str] = set()   # last symbol set we subscribed to (for sync diffing)
+
+
+def _universe_symbols(session: Session) -> list[str]:
+    from app.services import automation
+
+    st = automation.get_state(session)
+    return [s.strip().upper() for s in (st.universe or "").split(",") if s.strip()]
+
+
+def _position_targets(session: Session) -> dict[int, str]:
+    """Open Saxo positions as uic -> base symbol (streamed even if not in universe)."""
+    out: dict[int, str] = {}
+    try:
+        from app.portfolio.engine import PortfolioEngine
+
+        engine = PortfolioEngine(session)
+        if engine.saxo_active:
+            for p in engine.saxo_snapshot().get("positions", []):
+                if p.get("uic"):
+                    out[int(p["uic"])] = str(p["symbol"]).split(":")[0].upper()
+    except Exception:  # pragma: no cover
+        pass
+    return out
+
+
+def _desired_symbols(session: Session) -> set[str]:
+    """The stocks streaming SHOULD cover: current universe + open positions."""
+    return set(_universe_symbols(session)) | set(_position_targets(session).values())
 
 
 def _load_entries(session: Session) -> None:
@@ -124,37 +153,36 @@ def _execute_exit(symbol: str, price: float, reason: str) -> None:
 
 
 def start(session: Session, symbols: list[str] | None = None) -> dict:
-    """Resolve UICs for the universe and start streaming their prices."""
-    global _client, _uic_symbol, _peaks, _exited
+    """Resolve UICs for the universe + open positions and start streaming them."""
+    global _client, _uic_symbol, _peaks, _exited, _last_desired
     if not settings.saxo_access_token:
         return {"started": False, "error": "No Saxo token set."}
 
     from app.execution.broker_adapter import SaxoBrokerAdapter
-    from app.services import automation
 
     adapter = SaxoBrokerAdapter()
     account_key, _ = adapter._ensure_account()
 
-    if symbols is None:
-        state = automation.get_state(session)
-        symbols = [s.strip().upper() for s in (state.universe or "").split(",") if s.strip()]
+    universe = symbols if symbols is not None else _universe_symbols(session)
 
-    uics: list[int] = []
     _uic_symbol = {}
-    for sym in symbols:
+    for sym in universe:
         try:
-            uic = adapter.resolve_uic(sym)
-            uics.append(uic)
-            _uic_symbol[uic] = sym
+            _uic_symbol[adapter.resolve_uic(sym)] = sym
         except Exception as exc:  # symbol not tradable on Saxo — skip, don't fail
             logger.info("streaming: skip %s (%s)", sym, exc)
+    # Add open positions by their known uic (no resolve needed) so held stocks
+    # are always streamed, even if they've rotated out of the universe.
+    for uic, label in _position_targets(session).items():
+        _uic_symbol.setdefault(uic, label)
 
-    if not uics:
-        return {"started": False, "error": "No universe symbols resolved on Saxo."}
+    if not _uic_symbol:
+        return {"started": False, "error": "No symbols resolved on Saxo."}
 
     _peaks = {}
     _exited = set()
     _load_entries(session)
+    _last_desired = set(_uic_symbol.values()) if symbols is not None else _desired_symbols(session)
 
     if _client is not None:
         _client.stop()
@@ -166,8 +194,31 @@ def start(session: Session, symbols: list[str] | None = None) -> dict:
         environment=settings.saxo_environment,
         on_price=_on_price,
     )
+    uics = list(_uic_symbol)
     _client.start(uics)
     return {"started": True, "symbols": [_uic_symbol[u] for u in uics], "uics": uics}
+
+
+def sync(session: Session) -> dict:
+    """Keep a RUNNING stream aligned with the universe + open positions.
+
+    Called each automation tick. No-op if streaming isn't running (auto-start is
+    manual), if not on Saxo, or if the desired symbol set is unchanged — so it
+    only re-subscribes when discovery rotates the universe or a position opens/closes.
+    """
+    global _last_desired
+    if _client is None:  # streaming not started — respect manual control
+        return {"synced": False, "reason": "not running"}
+    from app.core.enums import BrokerMode
+    from app.portfolio.engine import PortfolioEngine
+
+    if PortfolioEngine(session).broker_mode is not BrokerMode.SAXO:
+        return {"synced": False, "reason": "not saxo"}
+    desired = _desired_symbols(session)
+    if desired == _last_desired:
+        return {"synced": False, "unchanged": True}
+    logger.info("streaming: universe/positions changed -> re-subscribing (%d symbols)", len(desired))
+    return {"synced": True, **start(session)}
 
 
 def stop() -> dict:

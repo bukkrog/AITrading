@@ -159,6 +159,14 @@ def tick(session: Session) -> dict:
         return {"ran": False, "reason": "error", "error": str(exc)}
 
     approved = [r.symbol for r in results if r.approved]
+    # Keep a running Saxo stream aligned with the (possibly rotated) universe +
+    # any positions opened/closed this cycle. No-op unless streaming is running.
+    try:
+        from app.services import streaming_service
+
+        streaming_service.sync(session)
+    except Exception as exc:  # never let streaming break the cycle
+        logger.warning("streaming sync failed: %s", exc)
     state.last_run_at = datetime.now(timezone.utc)
     state.runs_count += 1
     session.flush()
