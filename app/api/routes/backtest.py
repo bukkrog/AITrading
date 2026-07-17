@@ -17,6 +17,24 @@ def list_strategies() -> list[str]:
     return list(STRATEGY_REGISTRY)
 
 
+@router.get("/walk-forward")
+def walk_forward_endpoint(
+    symbol: str, strategy: str | None = None, session: Session = Depends(get_session)
+) -> dict:
+    """Out-of-sample walk-forward validation + the live deployment bar."""
+    from app.backtesting.walk_forward import deployment_checks, walk_forward
+    from app.strategies import get_strategy
+
+    df = get_bars_df(session, symbol.upper())
+    if len(df) < 200:
+        raise HTTPException(status_code=404, detail=f"Not enough history for {symbol} ({len(df)} bars)")
+    strat = get_strategy(strategy)
+    result = walk_forward(symbol.upper(), df, strat)
+    checks = deployment_checks(result)
+    return {**result.to_dict(), "deployment_ready": all(c["passed"] for c in checks),
+            "checks": checks}
+
+
 @router.get("/compare")
 def compare(symbol: str, session: Session = Depends(get_session)) -> dict:
     """Backtest every registered strategy on a symbol's stored history."""

@@ -180,6 +180,22 @@ def test_reconciliation_finds_orphan_sell_orders():
     assert [o["order_id"] for o in orphans] == ["2", "3"]
 
 
+def test_walk_forward_produces_oos_folds():
+    from app.backtesting.walk_forward import deployment_checks, walk_forward
+    from app.strategies.momentum import MomentumStrategy
+
+    df = _synthetic_df(400)  # ~4 folds of 63 test bars after 120 warmup
+    r = walk_forward("TEST", df, MomentumStrategy())
+    assert r.folds >= 3
+    assert len(r.fold_returns_pct) == r.folds
+    assert isinstance(r.oos_sharpe, float)
+    checks = deployment_checks(r)
+    assert {c["name"] for c in checks} == {"oos_sharpe", "min_folds", "positive_folds", "max_drawdown"}
+    # Too little history -> zero folds, never crashes.
+    r2 = walk_forward("TEST", _synthetic_df(100), MomentumStrategy())
+    assert r2.folds == 0
+
+
 def test_insufficient_history_is_neutral():
     tiny = _synthetic_df(5)
     for cls in STRATEGY_REGISTRY.values():
