@@ -45,6 +45,7 @@ export function SettingsMenu({ onChanged, onToast }: { onChanged: () => void; on
         saxo_token_endpoint: v.saxo_token_endpoint,
         default_broker_mode: v.default_broker_mode,
         live_trading_enabled: v.live_trading_enabled,
+        active_strategy: v.active_strategy,
         quant_score_threshold: v.quant_score_threshold,
         news_score_threshold: v.news_score_threshold,
         // Percent fields are held as PERCENT in the form (converted to fractions
@@ -303,6 +304,14 @@ export function SettingsMenu({ onChanged, onToast }: { onChanged: () => void; on
         {/* --- Trading cadence & costs --- */}
         <div>
           <h3 style={{ fontSize: 13 }}>Cadence &amp; costs</h3>
+          <Field label="Active strategy" hint="Which strategy automation trades with. Quick-flip = fast in/out (pair with a take-profit above your costs). Backtest & compare them under Analytics.">
+            <select value={String(form.active_strategy)} onChange={(e) => set("active_strategy", e.target.value)}>
+              {(opt.active_strategy ?? []).map((o) => {
+                const label = { momentum: "Momentum / trend", mean_reversion: "Mean-reversion", quick_flip: "Quick-flip (profit-target)", rsi2: "RSI(2) mean-reversion", donchian: "Donchian breakout (Turtle)", macd: "MACD / EMA-crossover" }[o] ?? o;
+                return <option key={o} value={o}>{label}</option>;
+              })}
+            </select>
+          </Field>
           <Field label="Quant score gate (buy if above)" hint="Default 70. Lower ⇒ trades more often on momentum. Lower to ~60 to see paper activity.">
             <input type="text" value={String(form.quant_score_threshold)} onChange={(e) => set("quant_score_threshold", Number(e.target.value))} style={{ maxWidth: 90 }} />
           </Field>

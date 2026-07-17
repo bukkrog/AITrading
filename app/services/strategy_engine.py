@@ -75,9 +75,11 @@ def build_pipeline(
     ``live`` selects the tighter live risk limits (v3); the broker itself is
     chosen by the account's mode (simulation | saxo).
     """
-    strategy = strategy or MomentumStrategy()
-    portfolio = PortfolioEngine(session)
     from app.config import settings
+    from app.strategies import get_strategy
+
+    strategy = strategy or get_strategy(settings.active_strategy)
+    portfolio = PortfolioEngine(session)
 
     risk_engine = RiskEngine(portfolio, settings.risk_config(live))
     # Broker is chosen by the account's current mode (simulation | saxo).

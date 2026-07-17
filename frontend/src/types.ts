@@ -222,6 +222,7 @@ export interface SettingsView {
   saxo_token_endpoint: string;
   default_broker_mode: string;
   live_trading_enabled: boolean;
+  active_strategy: string;
   quant_score_threshold: number;
   news_score_threshold: number;
   stop_loss_pct: number;

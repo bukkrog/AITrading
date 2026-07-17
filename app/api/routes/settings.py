@@ -39,6 +39,8 @@ class SettingsUpdate(BaseModel):
     # Broker / safety
     default_broker_mode: str | None = None
     live_trading_enabled: bool | None = None
+    # Strategy
+    active_strategy: str | None = None
     # Decision gates
     quant_score_threshold: float | None = None
     news_score_threshold: float | None = None
@@ -78,6 +80,12 @@ class SettingsUpdate(BaseModel):
     automation_universe: str | None = None
 
 
+def _strategy_names() -> list[str]:
+    from app.strategies import STRATEGY_REGISTRY
+
+    return list(STRATEGY_REGISTRY)
+
+
 def _mask(value: str | None) -> dict:
     if not value:
         return {"set": False, "hint": ""}
@@ -98,6 +106,7 @@ def _view() -> dict:
         "saxo_token_endpoint": settings.saxo_token_endpoint or "",
         "default_broker_mode": settings.default_broker_mode,
         "live_trading_enabled": settings.live_trading_enabled,
+        "active_strategy": settings.active_strategy,
         "quant_score_threshold": settings.quant_score_threshold,
         "news_score_threshold": settings.news_score_threshold,
         "stop_loss_pct": settings.stop_loss_pct,
@@ -132,6 +141,7 @@ def _view() -> dict:
             "saxo_environment": ["sim", "live"],
             "default_broker_mode": ["simulation", "saxo"],
             "market_data_source": ["synthetic", "yfinance", "saxo"],
+            "active_strategy": _strategy_names(),
             "discovery_sources": [
                 "day_gainers", "most_actives", "small_cap_gainers",
                 "aggressive_small_caps", "growth_tech", "wsb", "sp500", "dow30",

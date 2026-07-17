@@ -130,6 +130,10 @@ class Settings(BaseSettings):
     initial_cash: float = 100_000.0
     base_currency: str = "DKK"
 
+    # Which strategy the automation loop trades with (see STRATEGY_REGISTRY):
+    # momentum, mean_reversion, quick_flip, rsi2, donchian, macd.
+    active_strategy: str = "momentum"
+
     # Decision thresholds (0–100). A trade needs BOTH scores strictly above.
     quant_score_threshold: float = 70.0
     news_score_threshold: float = 70.0
