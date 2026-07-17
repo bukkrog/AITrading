@@ -72,3 +72,30 @@ def test_choose_by_mic_prefers_exchange_and_class():
     assert choose_by_mic(matches, "xcse", "B")["Identifier"] == 2
     assert choose_by_mic(matches, "xcse", None)["Identifier"] == 2  # first on-mic
     assert choose_by_mic(matches, "xpar", None) is None  # no listing on that mic
+
+
+# ---- Real-time streaming exits -------------------------------------------
+def test_streaming_exit_reason(monkeypatch):
+    from app.config import settings
+    from app.services import streaming_service as ss
+
+    monkeypatch.setattr(settings, "stop_loss_pct", 0.08)
+    monkeypatch.setattr(settings, "take_profit_pct", 0.15)
+    monkeypatch.setattr(settings, "trailing_stop_pct", 0.10)
+
+    # entry 100: stop at 92, take-profit at 115, trailing 10% off peak
+    assert "stop-loss" in ss._exit_reason(100.0, 100.0, 91.0)
+    assert "take-profit" in ss._exit_reason(100.0, 120.0, 116.0)
+    # peak 130, price 113: below take-profit (115) but -13% from peak -> trailing.
+    assert "trailing-stop" in ss._exit_reason(100.0, 130.0, 113.0)
+    assert ss._exit_reason(100.0, 105.0, 104.0) is None  # inside all bands
+
+
+def test_streaming_exit_off_when_thresholds_zero(monkeypatch):
+    from app.config import settings
+    from app.services import streaming_service as ss
+
+    monkeypatch.setattr(settings, "stop_loss_pct", 0.0)
+    monkeypatch.setattr(settings, "take_profit_pct", 0.0)
+    monkeypatch.setattr(settings, "trailing_stop_pct", 0.0)
+    assert ss._exit_reason(100.0, 200.0, 1.0) is None  # everything off -> never exit

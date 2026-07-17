@@ -385,6 +385,9 @@ class SaxoBrokerAdapter(BrokerAdapter):
             pb = p.get("PositionBase", {})
             pv = p.get("PositionView", {})
             df = p.get("DisplayAndFormat", {})
+            # Skip cash/FX balances (e.g. EURDKK) — this is an equities platform.
+            if pb.get("AssetType") in ("FxSpot", "FxForwards", "CashBalance"):
+                continue
             qty = pb.get("Amount") or 0.0
             open_price = pb.get("OpenPrice") or 0.0
             pnl = pv.get("ProfitLossOnTrade") or 0.0
