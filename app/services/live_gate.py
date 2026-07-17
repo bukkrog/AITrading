@@ -37,7 +37,17 @@ def _universe() -> list[str]:
 def _best_backtest_sharpe(session: Session) -> tuple[float, str]:
     best, best_sym = float("-inf"), ""
     strat = MomentumStrategy()
-    for sym in _universe():
+    # Backtest the universe that's ACTUALLY being traded (it has fresh stored
+    # bars), falling back to the configured default. Using the stale config
+    # default backtested symbols with no data after the bar cleanup -> Sharpe 0.
+    from app.services import automation
+
+    state_uni = [
+        s.strip().upper()
+        for s in (automation.get_state(session).universe or "").split(",")
+        if s.strip()
+    ]
+    for sym in state_uni or _universe():
         df = get_bars_df(session, sym)
         if len(df) < 60:
             continue
