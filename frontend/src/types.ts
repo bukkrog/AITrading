@@ -79,6 +79,7 @@ export interface Signal {
   quant_rationale: string;
   news_rationale: string;
   risk_rationale: string;
+  reject_reason: string;
 }
 
 export interface AuditEntry {

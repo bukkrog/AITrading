@@ -268,6 +268,44 @@ def test_pead_adjustment_reorders_without_mutating_cache():
     assert out[0]["pead_surprise"] == 9.0
 
 
+def test_rejected_signal_persists_reason(monkeypatch):
+    import pandas as pd
+
+    from app.config import settings
+    from app.data.database import session_scope
+    from app.data.models import Signal
+    from app.schemas.trading import RiskAssessment
+    from app.services import signal_engine
+
+    from app.core.enums import SignalDirection
+
+    class _Q:
+        def analyze(self, s, df):
+            from app.schemas.trading import QuantScore
+            return QuantScore(symbol=s, score=80.0, direction=SignalDirection.BULLISH, rationale="stub")
+
+    class _N:
+        def analyze(self, s, headlines):
+            from app.schemas.trading import NewsScore
+            return NewsScore(symbol=s, score=50.0, direction=SignalDirection.NEUTRAL, rationale="stub")
+
+    class _R:
+        def assess(self, s, side, px, prices, **kw):
+            return RiskAssessment(approved=True, risk_score=10.0, approved_quantity=1, reasons=["ok"])
+
+    monkeypatch.setattr(settings, "quant_score_threshold", 101.0)  # force reject
+    idx = pd.date_range("2024-01-01", periods=60, freq="D", tz="UTC")
+    df = pd.DataFrame({"open": 100.0, "high": 101.0, "low": 99.0, "close": 100.0, "volume": 1e6}, index=idx)
+    with session_scope() as session:
+        signal_engine.evaluate(
+            session, "REASONX", df, {"REASONX": 100.0},
+            quant_agent=_Q(), news_agent=_N(), risk_agent=_R(),
+        )
+        row = session.query(Signal).filter_by(symbol="REASONX").order_by(Signal.id.desc()).first()
+        assert row.decision == "rejected"
+        assert "Quant" in row.reject_reason and "101" in row.reject_reason
+
+
 def test_saxo_oauth_flow(monkeypatch, tmp_path):
     from app.config import settings
     from app.services import saxo_oauth

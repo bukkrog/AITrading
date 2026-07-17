@@ -38,6 +38,10 @@ def recent_signals(limit: int = 50, session: Session = Depends(get_session)) -> 
             "quant_rationale": s.quant_rationale,
             "news_rationale": s.news_rationale,
             "risk_rationale": s.risk_rationale,
+            # Older rows predate the column — the risk text was usually the
+            # decisive cause, so fall back to it for rejected legacy signals.
+            "reject_reason": s.reject_reason
+            or (s.risk_rationale if s.decision == "rejected" else ""),
         }
         for s in rows
     ]

@@ -109,6 +109,7 @@ def evaluate(
         quant_rationale=quant.rationale,
         news_rationale=news.rationale,
         risk_rationale=risk.rationale,
+        reject_reason="" if approved else " ".join(reasons),
     )
     session.add(signal_row)
     session.flush()

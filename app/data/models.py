@@ -123,6 +123,8 @@ class Signal(Base):
     quant_rationale: Mapped[str] = mapped_column(String(2048), default="")
     news_rationale: Mapped[str] = mapped_column(String(2048), default="")
     risk_rationale: Mapped[str] = mapped_column(String(2048), default="")
+    # The decisive rejection reason(s), compact — "" on approved signals.
+    reject_reason: Mapped[str] = mapped_column(String(1024), default="")
 
 
 class Order(Base):

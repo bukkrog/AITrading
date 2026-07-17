@@ -265,18 +265,23 @@ export function App() {
             <div className="card section-gap">
               <h2>Latest signals</h2>
               {signals.length > 0 ? (
-                <table>
-                  <thead><tr><th>Symbol</th><th>Decision</th><th>Quant</th><th>News</th><th>Risk</th><th>Combined</th></tr></thead>
-                  <tbody>
-                    {signals.map((s) => (
-                      <tr key={s.id} title={`${s.quant_rationale}\n${s.news_rationale}\n${s.risk_rationale}`}>
-                        <td>{s.symbol}</td><td><span className={`tag ${s.decision}`}>{s.decision}</span></td>
-                        <td>{s.quant_score.toFixed(1)}</td><td>{s.news_score.toFixed(1)}</td>
-                        <td>{s.risk_score.toFixed(1)}</td><td>{s.combined_score.toFixed(1)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                <div style={{ overflowX: "auto" }}>
+                  <table>
+                    <thead><tr><th>Symbol</th><th>Decision</th><th>Quant</th><th>News</th><th>Risk</th><th>Reason</th></tr></thead>
+                    <tbody>
+                      {signals.map((s) => (
+                        <tr key={s.id} title={`${s.quant_rationale}\n${s.news_rationale}\n${s.risk_rationale}`}>
+                          <td>{s.symbol}</td><td><span className={`tag ${s.decision}`}>{s.decision}</span></td>
+                          <td>{s.quant_score.toFixed(1)}</td><td>{s.news_score.toFixed(1)}</td>
+                          <td>{s.risk_score.toFixed(1)}</td>
+                          <td className="muted" style={{ fontSize: 12, maxWidth: 420 }}>
+                            {s.decision === "rejected" ? (s.reject_reason || "—") : "✓ approved"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               ) : <p className="muted">No signals yet.</p>}
             </div>
           </>

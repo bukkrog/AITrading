@@ -44,6 +44,18 @@ def init_db() -> None:
     from app.data import models  # noqa: F401
 
     Base.metadata.create_all(bind=engine)
+    # Lightweight migrations: create_all never ALTERs existing tables, so add
+    # late-added columns here (idempotent, SQLite + Postgres compatible).
+    from sqlalchemy import inspect, text
+
+    try:
+        cols = {c["name"] for c in inspect(engine).get_columns("signals")}
+        if "reject_reason" not in cols:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE signals ADD COLUMN reject_reason VARCHAR(1024) DEFAULT ''"))
+            logger.info("Migration: added signals.reject_reason")
+    except Exception as exc:  # never block startup on a migration probe
+        logger.warning("Column migration check failed: %s", exc)
     logger.info("Database initialised (%s)", settings.database_url)
 
 
