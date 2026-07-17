@@ -50,19 +50,22 @@ class RiskEngine:
         daily_loss = self.portfolio.daily_loss_pct(prices)
         drawdown = self.portfolio.drawdown_pct(prices)
 
-        if daily_loss >= cfg.max_daily_loss_pct:
-            reasons.append(
-                f"Daily loss {daily_loss*100:.1f}% >= limit {cfg.max_daily_loss_pct*100:.1f}% "
-                "- drawdown protection active."
-            )
-            return RiskAssessment(approved=False, risk_score=100.0, reasons=reasons)
+        # Daily-loss / drawdown halts can be turned off (e.g. while testing on
+        # SIM). The kill switch and per-trade sizing limits always remain.
+        if settings.enforce_loss_halts:
+            if daily_loss >= cfg.max_daily_loss_pct:
+                reasons.append(
+                    f"Daily loss {daily_loss*100:.1f}% >= limit {cfg.max_daily_loss_pct*100:.1f}% "
+                    "- drawdown protection active."
+                )
+                return RiskAssessment(approved=False, risk_score=100.0, reasons=reasons)
 
-        if drawdown >= cfg.max_total_drawdown_pct:
-            reasons.append(
-                f"Total drawdown {drawdown*100:.1f}% >= limit {cfg.max_total_drawdown_pct*100:.1f}% "
-                "- drawdown protection active."
-            )
-            return RiskAssessment(approved=False, risk_score=100.0, reasons=reasons)
+            if drawdown >= cfg.max_total_drawdown_pct:
+                reasons.append(
+                    f"Total drawdown {drawdown*100:.1f}% >= limit {cfg.max_total_drawdown_pct*100:.1f}% "
+                    "- drawdown protection active."
+                )
+                return RiskAssessment(approved=False, risk_score=100.0, reasons=reasons)
 
         existing = self.portfolio.get_position(symbol)
         is_new_symbol = existing is None or existing.quantity == 0

@@ -57,6 +57,10 @@ class SettingsUpdate(BaseModel):
     risk_max_total_drawdown_pct: float | None = None
     # Market hours
     market_hours_enabled: bool | None = None
+    # Safety
+    enforce_loss_halts: bool | None = None
+    discovery_min_price: float | None = None
+    discovery_min_dollar_volume: float | None = None
     # Data & news
     market_data_source: str | None = None
     news_enabled: bool | None = None
@@ -119,6 +123,9 @@ def _view() -> dict:
         "risk_max_daily_loss_pct": settings.risk.max_daily_loss_pct,
         "risk_max_total_drawdown_pct": settings.risk.max_total_drawdown_pct,
         "market_hours_enabled": settings.market_hours_enabled,
+        "enforce_loss_halts": settings.enforce_loss_halts,
+        "discovery_min_price": settings.discovery_min_price,
+        "discovery_min_dollar_volume": settings.discovery_min_dollar_volume,
         "market_data_source": settings.market_data_source,
         "news_enabled": settings.news_enabled,
         "market_lookback_days": settings.market_lookback_days,

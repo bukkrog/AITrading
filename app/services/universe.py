@@ -226,12 +226,17 @@ def rank_by_momentum(symbols: list[str], top_n: int) -> list[dict]:
     import numpy as np
     import yfinance as yf
 
+    from app.config import settings
+
     if not symbols:
         return []
     raw = yf.download(
         symbols, period="4mo", interval="1d", progress=False, auto_adjust=True
     )
     close = raw["Close"] if "Close" in raw else raw
+    vol = raw["Volume"] if "Volume" in raw else None
+    min_price = settings.discovery_min_price
+    min_dvol = settings.discovery_min_dollar_volume
     ranked: list[dict] = []
     for sym in symbols:
         try:
@@ -240,6 +245,18 @@ def rank_by_momentum(symbols: list[str], top_n: int) -> list[dict]:
             continue
         if len(s) < 55:
             continue
+        # Liquidity filter: skip penny / thinly-traded names (wide spreads).
+        price = float(s.iloc[-1])
+        if price < min_price:
+            continue
+        if vol is not None and min_dvol > 0:
+            try:
+                v = vol[sym].dropna() if sym in getattr(vol, "columns", []) else vol.dropna()
+                avg_dollar_vol = float((s.tail(20) * v.tail(20)).mean())
+                if avg_dollar_vol < min_dvol:
+                    continue
+            except Exception:
+                pass
         roc = float(s.iloc[-1] / s.iloc[-21] - 1.0) * 100.0
         sma20 = float(s.tail(20).mean())
         sma50 = float(s.tail(50).mean())

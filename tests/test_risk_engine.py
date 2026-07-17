@@ -46,7 +46,8 @@ def test_kill_switch_blocks_trade(risk):
     assert "Kill switch" in a.rationale
 
 
-def test_total_drawdown_halts_trading(risk):
+def test_total_drawdown_halts_trading(risk, monkeypatch):
+    monkeypatch.setattr(settings, "enforce_loss_halts", True)
     engine, pf = risk
     pf.account.peak_value = settings.initial_cash * 1.2  # 16.7% drawdown > 10%
     pf.session.flush()
@@ -70,14 +71,25 @@ def test_no_leverage_notional_never_exceeds_cash(risk):
     assert a.approved_quantity * 100.0 <= pf.cash
 
 
-def test_daily_loss_halts_trading(risk):
+def test_daily_loss_halts_trading(risk, monkeypatch):
     # A large intraday loss (cash collapsed vs. day-start value) must halt trades.
+    monkeypatch.setattr(settings, "enforce_loss_halts", True)
     engine, pf = risk
     pf.account.cash = 250.0  # day started at initial_cash -> ~99.8% daily loss
     pf.session.flush()
     a = engine.assess("NOVO", OrderSide.BUY, 100.0, {"NOVO": 100.0})
     assert not a.approved
     assert "daily loss" in a.rationale.lower()
+
+
+def test_loss_halts_can_be_disabled(risk, monkeypatch):
+    # With enforce_loss_halts OFF (e.g. SIM testing), a big drawdown does NOT halt.
+    monkeypatch.setattr(settings, "enforce_loss_halts", False)
+    engine, pf = risk
+    pf.account.peak_value = settings.initial_cash * 2.0  # 50% drawdown
+    pf.session.flush()
+    a = engine.assess("NOVO", OrderSide.BUY, 100.0, {"NOVO": 100.0})
+    assert "drawdown" not in a.rationale.lower()  # not blocked by the halt
 
 
 def test_sell_closes_existing_position(risk):

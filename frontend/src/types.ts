@@ -235,6 +235,7 @@ export interface SettingsView {
   risk_max_daily_loss_pct: number;
   risk_max_total_drawdown_pct: number;
   market_hours_enabled: boolean;
+  enforce_loss_halts: boolean;
   market_data_source: string;
   news_enabled: boolean;
   market_lookback_days: number;

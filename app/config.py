@@ -152,6 +152,11 @@ class Settings(BaseSettings):
     take_profit_pct: float = 0.15
     trailing_stop_pct: float = 0.10
 
+    # Enforce the daily-loss / drawdown halts in the risk engine. Turn OFF while
+    # testing on SIM so trading isn't stopped and you can observe the strategy.
+    # (Kill switch + emergency stop always remain active.)
+    enforce_loss_halts: bool = True
+
     # ---- Market hours (v8) ------------------------------------------
     # When true, automation pauses (does not open/close trades) while the
     # exchanges of the traded symbols are closed, and reports why. Ignored for
@@ -204,6 +209,10 @@ class Settings(BaseSettings):
         "day_gainers,most_actives,small_cap_gainers,aggressive_small_caps,"
         "growth_tech,wsb,sp500,dow30,omxc25,dax,cac,europe"
     )
+    # Liquidity filter: skip illiquid / penny names (wide spreads eat fast
+    # strategies). Require a minimum last price and average daily $-volume.
+    discovery_min_price: float = 5.0
+    discovery_min_dollar_volume: float = 5_000_000.0
     # Max tickers pulled into the pool before momentum ranking (keeps the bulk
     # download fast; momentum/attention sources are prioritised when capping).
     discovery_max_pool: int = 100

@@ -60,6 +60,7 @@ export function SettingsMenu({ onChanged, onToast }: { onChanged: () => void; on
         risk_max_daily_loss_pct: v.risk_max_daily_loss_pct * 100,
         risk_max_total_drawdown_pct: v.risk_max_total_drawdown_pct * 100,
         market_hours_enabled: v.market_hours_enabled,
+        enforce_loss_halts: v.enforce_loss_halts,
         market_data_source: v.market_data_source,
         news_enabled: v.news_enabled,
         market_lookback_days: v.market_lookback_days,
@@ -93,13 +94,15 @@ export function SettingsMenu({ onChanged, onToast }: { onChanged: () => void; on
   // Recommended exit presets per strategy (percent values + cooldown minutes),
   // pre-filled when you pick a strategy so it's ready to use. Quick-flip keeps a
   // tight take-profit ABOVE round-trip costs so fast flips still net a profit.
+  // Presets use a POSITIVE reward:risk (take-profit >= stop-loss), so you don't
+  // need a high win-rate just to break even. Quick-flip is 2:1 (tp 2% / sl 1%).
   const STRATEGY_PRESETS: Record<string, { sl: number; tp: number; tr: number; cd: number }> = {
-    quick_flip: { sl: 1.5, tp: 1.0, tr: 0, cd: 2 },
+    quick_flip: { sl: 1, tp: 2, tr: 0, cd: 2 },
     momentum: { sl: 8, tp: 15, tr: 10, cd: 5 },
-    mean_reversion: { sl: 5, tp: 5, tr: 0, cd: 5 },
-    rsi2: { sl: 5, tp: 4, tr: 0, cd: 2 },
-    donchian: { sl: 10, tp: 0, tr: 12, cd: 5 },
-    macd: { sl: 8, tp: 0, tr: 10, cd: 5 },
+    mean_reversion: { sl: 4, tp: 6, tr: 0, cd: 5 },
+    rsi2: { sl: 4, tp: 6, tr: 0, cd: 2 },
+    donchian: { sl: 8, tp: 0, tr: 12, cd: 5 },
+    macd: { sl: 6, tp: 0, tr: 10, cd: 5 },
   };
 
   const pickStrategy = (name: string) => {
@@ -411,6 +414,12 @@ export function SettingsMenu({ onChanged, onToast }: { onChanged: () => void; on
           <Field label="Max drawdown halt %" hint="Stop all new trades if down this much from the peak. Default 10%.">
             <input type="number" step="1" value={String(form.risk_max_total_drawdown_pct ?? "")}
               onChange={(e) => set("risk_max_total_drawdown_pct", e.target.value === "" ? 0 : Number(e.target.value))} style={{ maxWidth: 90 }} />
+          </Field>
+          <Field label="Enforce loss halts" hint="When ON, the daily-loss and drawdown limits above stop trading. Turn OFF on SIM to keep trading and observe the strategy. Kill switch always works.">
+            <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <input type="checkbox" checked={Boolean(form.enforce_loss_halts)} onChange={(e) => set("enforce_loss_halts", e.target.checked)} />
+              <span>{form.enforce_loss_halts ? "on (live-safe)" : "off (SIM testing)"}</span>
+            </label>
           </Field>
         </div>
       </div>
