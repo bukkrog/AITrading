@@ -94,6 +94,21 @@ def build_pipeline(
     )
 
 
+def _order_skip(session: Session, symbol: str, kind: str, exc: Exception) -> None:
+    """Record a single failed order without aborting the cycle.
+
+    A resting sell order for a still-open position ("SellOrdersAlreadyExist...")
+    is expected while an exit is pending — logged as info, not an error.
+    """
+    msg = str(exc)
+    benign = "SellOrdersAlreadyExist" in msg or "already exists" in msg.lower()
+    action = "order_pending" if benign else f"{kind}_order_failed"
+    audit_log_service.record(
+        session, AuditCategory.ORDER, action, symbol=symbol, message=msg[:400]
+    )
+    (logger.info if benign else logger.warning)("%s %s skipped: %s", kind, symbol, msg[:200])
+
+
 def _peak_since(df, since, floor: float) -> float:
     """Highest high in ``df`` since ``since`` (position entry), never below floor."""
     try:
@@ -211,18 +226,23 @@ def run_cycle(
                 pos.symbol, OrderSide.SELL, price, prices
             )
             if assessment.approved and assessment.approved_quantity > 0:
-                pipe.execution_agent.execute(
-                    TradeProposal(
-                        symbol=pos.symbol,
-                        side=OrderSide.SELL,
-                        quantity=assessment.approved_quantity,
-                        reference_price=price,
+                try:
+                    pipe.execution_agent.execute(
+                        TradeProposal(
+                            symbol=pos.symbol,
+                            side=OrderSide.SELL,
+                            quantity=assessment.approved_quantity,
+                            reference_price=price,
+                        )
                     )
-                )
-                audit_log_service.record(
-                    session, AuditCategory.ORDER, "exit", symbol=pos.symbol,
-                    message=f"Sold {pos.symbol}: {reason}.",
-                )
+                    audit_log_service.record(
+                        session, AuditCategory.ORDER, "exit", symbol=pos.symbol,
+                        message=f"Sold {pos.symbol}: {reason}.",
+                    )
+                except Exception as exc:
+                    # A single order failure (e.g. a sell already resting on the
+                    # broker) must NOT abort the whole cycle. Log and move on.
+                    _order_skip(session, pos.symbol, "exit", exc)
 
     # ---- Entries ------------------------------------------------------
     for sym in symbols:
@@ -259,16 +279,19 @@ def run_cycle(
                     message=f"Skipped {sym}: notional {notional:.0f} < min {settings.min_trade_notional:.0f}.",
                 )
                 continue
-            pipe.execution_agent.execute(
-                TradeProposal(
-                    symbol=sym,
-                    side=OrderSide.BUY,
-                    quantity=qty,
-                    reference_price=prices[sym],
-                    stop_price=result.risk.stop_price,
-                    signal_id=result.signal_id,
+            try:
+                pipe.execution_agent.execute(
+                    TradeProposal(
+                        symbol=sym,
+                        side=OrderSide.BUY,
+                        quantity=qty,
+                        reference_price=prices[sym],
+                        stop_price=result.risk.stop_price,
+                        signal_id=result.signal_id,
+                    )
                 )
-            )
+            except Exception as exc:  # one bad order shouldn't kill the cycle
+                _order_skip(session, sym, "entry", exc)
 
     # Refresh prices (unchanged intra-cycle) and snapshot.
     snap = pipe.portfolio.snapshot(prices)

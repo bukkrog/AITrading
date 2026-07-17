@@ -41,6 +41,18 @@ async def lifespan(app: FastAPI):
         settings.environment,
         settings.live_trading_enabled,
     )
+    # Resume the automation loop on boot if it was enabled (survives restarts).
+    try:
+        from app.data.database import session_scope
+        from app.services import automation as automation_service
+
+        with session_scope() as session:
+            state = automation_service.get_state(session)
+            if state.enabled and not state.emergency_stopped:
+                automation_service._ensure_loop()
+                logger.info("Automation was enabled — background loop resumed.")
+    except Exception as exc:  # never block startup on this
+        logger.warning("Could not auto-resume automation loop: %s", exc)
     yield
     from app.services import automation as automation_service
 

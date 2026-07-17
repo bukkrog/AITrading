@@ -68,6 +68,26 @@ def test_strategy_comparison_ranks_by_sharpe(session):
 
 
 # ---- Automation tick -----------------------------------------------------
+def test_is_due_handles_naive_datetime():
+    """After a restart SQLite yields a naive last_run_at; _is_due must not raise."""
+    from datetime import datetime, timedelta, timezone
+    from types import SimpleNamespace
+
+    from app.services.automation import _is_due
+
+    now = datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+    naive_old = SimpleNamespace(enabled=True, emergency_stopped=False,
+                               interval_seconds=30, last_run_at=datetime(2026, 1, 1, 11, 0, 0))
+    assert _is_due(naive_old, now) is True  # 1h ago, naive -> due, no crash
+    naive_recent = SimpleNamespace(enabled=True, emergency_stopped=False,
+                                  interval_seconds=30,
+                                  last_run_at=now.replace(tzinfo=None) - timedelta(seconds=5))
+    assert _is_due(naive_recent, now) is False  # 5s ago < 30s
+    disabled = SimpleNamespace(enabled=False, emergency_stopped=False,
+                              interval_seconds=30, last_run_at=None)
+    assert _is_due(disabled, now) is False
+
+
 def test_automation_tick_runs_paper(session, monkeypatch):
     monkeypatch.setattr(settings, "ai_auth_mode", "off")  # hermetic
     monkeypatch.setattr(settings, "market_data_source", "synthetic")  # no network news

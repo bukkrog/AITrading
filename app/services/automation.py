@@ -100,6 +100,20 @@ def tick(session: Session) -> dict:
             )
             return {"ran": False, "reason": "live_gate_failed", "failed": failed}
 
+    # Let the screener pick the universe FIRST, so the market-hours gate below
+    # reflects what we'll actually trade (e.g. don't pause on a stale US universe
+    # when discovery would rotate us into open European names).
+    if settings.discovery_enabled:
+        try:
+            from app.services import discovery
+
+            discovery.apply_to_automation(session)
+            state = get_state(session)  # universe just changed
+        except Exception as exc:
+            audit_log_service.record(
+                session, AuditCategory.AUTOMATION, "discovery_error", message=str(exc)[:300]
+            )
+
     # Pause while the traded exchanges are closed (real data sources only).
     if settings.market_hours_enabled and settings.market_data_source != "synthetic":
         from app.services import market_hours
@@ -126,13 +140,6 @@ def tick(session: Session) -> dict:
         _market_was_open = True
 
     try:
-        # Optionally let the screener choose what to trade before this cycle.
-        if settings.discovery_enabled:
-            from app.services import discovery
-
-            discovery.apply_to_automation(session)
-            state = get_state(session)  # universe just changed
-
         universe = _universe(state)
         results = strategy_engine.run_cycle(
             session,
@@ -269,20 +276,27 @@ def _flatten_all(session: Session, pf) -> list[str]:
     return closed
 
 
+def _is_due(state: AutomationState, now: datetime | None = None) -> bool:
+    """Whether a tick should run. Robust to naive datetimes from SQLite after a
+    restart (treated as UTC), which otherwise raised and stalled the loop."""
+    if not (state.enabled and not state.emergency_stopped):
+        return False
+    if state.last_run_at is None:
+        return True
+    last = state.last_run_at
+    if last.tzinfo is None:
+        last = last.replace(tzinfo=timezone.utc)
+    now = now or datetime.now(timezone.utc)
+    return (now - last).total_seconds() >= state.interval_seconds
+
+
 # ---- Background loop --------------------------------------------------
 def _loop() -> None:
     logger.info("Automation loop started.")
     while not _stop.is_set():
         try:
             with session_scope() as session:
-                state = get_state(session)
-                due = state.enabled and not state.emergency_stopped
-                if due and state.last_run_at is not None:
-                    elapsed = (
-                        datetime.now(timezone.utc) - state.last_run_at
-                    ).total_seconds()
-                    due = elapsed >= state.interval_seconds
-                if due:
+                if _is_due(get_state(session)):
                     tick(session)
         except Exception as exc:  # pragma: no cover - loop resilience
             logger.exception("Automation loop error: %s", exc)
