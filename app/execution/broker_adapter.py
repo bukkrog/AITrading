@@ -423,6 +423,28 @@ class SaxoBrokerAdapter(BrokerAdapter):
             )
         return out
 
+    def closed_pnl_by_symbol(self, top: int = 1000) -> list[dict]:
+        """Realized P&L per symbol from closed positions (base currency), best-first."""
+        data = self._get(
+            "/port/v1/closedpositions/me",
+            {"FieldGroups": "ClosedPosition,DisplayAndFormat", "$top": top},
+        )
+        agg: dict[str, dict] = {}
+        for r in data.get("Data", []):
+            cp = r.get("ClosedPosition", {})
+            df = r.get("DisplayAndFormat", {})
+            sym = str(df.get("Symbol") or cp.get("Uic")).split(":")[0]
+            pnl = cp.get("ClosedProfitLossInBaseCurrency")
+            if pnl is None:
+                pnl = cp.get("ClosedProfitLoss") or 0.0
+            row = agg.setdefault(sym, {"symbol": sym, "realized_pnl": 0.0, "trades": 0})
+            row["realized_pnl"] += float(pnl)
+            row["trades"] += 1
+        rows = sorted(agg.values(), key=lambda x: x["realized_pnl"], reverse=True)
+        for x in rows:
+            x["realized_pnl"] = round(x["realized_pnl"], 2)
+        return rows
+
     def account_snapshot(self) -> dict:
         """Balance + normalized positions — the live Saxo truth for the UI."""
         bal = self.balance()

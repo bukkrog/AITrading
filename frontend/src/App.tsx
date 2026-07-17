@@ -20,6 +20,7 @@ import type {
   MarketHours,
   Monitoring,
   Portfolio,
+  Realized,
   Signal,
   Snapshot,
   StreamingStatus,
@@ -40,6 +41,7 @@ export function App() {
   const [automation, setAutomation] = useState<AutomationInfo | null>(null);
   const [marketHours, setMarketHours] = useState<MarketHours | null>(null);
   const [streaming, setStreaming] = useState<StreamingStatus | null>(null);
+  const [realized, setRealized] = useState<Realized | null>(null);
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -71,6 +73,7 @@ export function App() {
       api.brokerHealth().then(setBrokerHealth).catch(() => setBrokerHealth(null));
       api.marketHours().then(setMarketHours).catch(() => setMarketHours(null));
       api.streamingStatus().then(setStreaming).catch(() => setStreaming(null));
+      api.realized().then(setRealized).catch(() => setRealized(null));
     } catch (e) {
       setError((e as Error).message);
     }
@@ -203,6 +206,33 @@ export function App() {
                 </table>
               ) : <p className="muted">No open positions.</p>}
             </div>
+
+            {/* ---- Realised P&L by stock (which names you actually gained/lost on) ---- */}
+            {realized && realized.per_symbol.length > 0 && (
+              <div className="card section-gap">
+                <h2>Realised P&amp;L by stock</h2>
+                <p className="muted" style={{ fontSize: 12, marginTop: -4 }}>
+                  From closed trades{realized.source === "saxo" ? " (Saxo)" : ""}. Total realised{" "}
+                  <strong className={realized.total >= 0 ? "pos" : "neg"}>
+                    {realized.total >= 0 ? "+" : ""}{realized.total.toLocaleString()} {realized.currency ?? ""}
+                  </strong>. Open positions' gains are in the table above.
+                </p>
+                <table>
+                  <thead><tr><th>Symbol</th><th>Realised P/L</th><th>Closed trades</th></tr></thead>
+                  <tbody>
+                    {realized.per_symbol.filter((r) => r.realized_pnl !== 0).map((r) => (
+                      <tr key={r.symbol}>
+                        <td>{r.symbol}</td>
+                        <td className={r.realized_pnl >= 0 ? "pos" : "neg"}>
+                          {r.realized_pnl >= 0 ? "+" : ""}{r.realized_pnl.toLocaleString()} {realized.currency ?? ""}
+                        </td>
+                        <td>{r.trades}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
             {portfolio.source === "saxo" && (
               <div className="section-gap">
                 <OpenOrders orders={portfolio.open_orders ?? []} onChanged={refresh} onToast={showToast} />

@@ -36,6 +36,20 @@ export interface OpenOrder {
   price: number | null;
 }
 
+export interface RealizedRow {
+  symbol: string;
+  realized_pnl: number;
+  trades: number;
+}
+
+export interface Realized {
+  source: string;
+  currency?: string;
+  per_symbol: RealizedRow[];
+  total: number;
+  error?: string;
+}
+
 export interface Snapshot {
   ts: string;
   cash: number;

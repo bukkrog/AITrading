@@ -12,6 +12,7 @@ import type {
   MarketHours,
   Monitoring,
   Portfolio,
+  Realized,
   SettingsView,
   Signal,
   Snapshot,
@@ -105,6 +106,7 @@ export const api = {
     post<{ closed: string; quantity: number }>(`/control/close-position?symbol=${encodeURIComponent(symbol)}`),
   positionHistory: (symbol: string) =>
     get<{ symbol: string; base: string; closes: number[] }>(`/portfolio/history?symbol=${encodeURIComponent(symbol)}`),
+  realized: () => get<Realized>("/portfolio/realized"),
   saxoTest: () =>
     get<{ connected: boolean; environment?: string; error?: string; balance?: Record<string, unknown>; account_key?: string }>(
       "/control/saxo-test",

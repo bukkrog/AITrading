@@ -149,6 +149,39 @@ def attribution(session: Session = Depends(get_session)) -> dict:
     }
 
 
+@router.get("/realized")
+def realized_by_symbol(session: Session = Depends(get_session)) -> dict:
+    """Realized (closed-trade) P&L per stock — which names you actually made/lost on."""
+    engine = PortfolioEngine(session)
+    if engine.broker_mode.value == "saxo":
+        from app.core.enums import BrokerMode
+        from app.execution.broker_adapter import build_broker
+
+        try:
+            adapter = build_broker(BrokerMode.SAXO)
+            rows = adapter.closed_pnl_by_symbol()
+            currency = (adapter.balance() or {}).get("currency")
+        except Exception as exc:
+            return {"source": "saxo", "error": str(exc)[:200], "per_symbol": [], "total": 0.0}
+        return {
+            "source": "saxo",
+            "currency": currency,
+            "per_symbol": rows,
+            "total": round(sum(r["realized_pnl"] for r in rows), 2),
+        }
+    # Paper: realized P&L from the local FIFO attribution.
+    positions = engine.positions()
+    prices = _prices(session, [p.symbol for p in positions])
+    a = attribution_mod.compute(session, prices)
+    rows = [
+        {"symbol": r.symbol, "realized_pnl": round(r.realized_pnl, 2), "trades": r.closed_trades}
+        for r in a.per_symbol if r.closed_trades
+    ]
+    rows.sort(key=lambda x: x["realized_pnl"], reverse=True)
+    return {"source": "paper", "currency": engine.account.base_currency,
+            "per_symbol": rows, "total": round(a.total_realized, 2)}
+
+
 @router.get("/history")
 def position_history(symbol: str, limit: int = 60, session: Session = Depends(get_session)) -> dict:
     """Recent closing prices for a held symbol, for the per-position mini chart.
