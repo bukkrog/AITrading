@@ -22,6 +22,40 @@ def set_kill_switch(engaged: bool, session: Session = Depends(get_session)) -> d
     return {"kill_switch_engaged": engine.kill_switch_engaged}
 
 
+@router.post("/close-position")
+def close_position(symbol: str, session: Session = Depends(get_session)) -> dict:
+    """Manually market-close an open position (current broker)."""
+    engine = PortfolioEngine(session)
+    if engine.broker_mode is BrokerMode.SAXO:
+        try:
+            adapter = build_broker(BrokerMode.SAXO)
+            result = adapter.close_position(symbol)
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        try:
+            engine.invalidate_saxo_cache()
+        except Exception:
+            pass
+        session.commit()
+        return result
+    # Paper broker: sell the whole position at the last stored price.
+    from app.core.enums import OrderSide
+    from app.data.market_data import get_bars_df
+    from app.execution.execution_engine import ExecutionEngine
+    from app.schemas.trading import OrderRequest
+
+    pos = engine.get_position(symbol)
+    if not pos or pos.quantity == 0:
+        raise HTTPException(status_code=404, detail=f"No open position for '{symbol}'.")
+    df = get_bars_df(session, symbol)
+    price = float(df["close"].iloc[-1]) if len(df) else pos.avg_price
+    ExecutionEngine(session, engine, build_broker(BrokerMode.SIMULATION)).submit(
+        OrderRequest(symbol=symbol, side=OrderSide.SELL, quantity=pos.quantity), price
+    )
+    session.commit()
+    return {"closed": symbol, "quantity": pos.quantity, "price": round(price, 2)}
+
+
 @router.post("/allocation")
 def set_allocation(
     amount: float, reset_positions: bool = True, session: Session = Depends(get_session)

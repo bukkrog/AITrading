@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 import { api } from "./api";
 import { AlertsPanel } from "./components/AlertsPanel";
 import { Analytics } from "./components/Analytics";
@@ -6,6 +6,7 @@ import { AuditLog } from "./components/AuditLog";
 import { EquityChart } from "./components/EquityChart";
 import { MonitoringPanel } from "./components/MonitoringPanel";
 import { OpenOrders } from "./components/OpenOrders";
+import { PositionChart } from "./components/PositionChart";
 import { SettingsMenu } from "./components/SettingsMenu";
 import { Sidebar, type View } from "./components/Sidebar";
 import type {
@@ -83,6 +84,13 @@ export function App() {
   const showToast = (msg: string) => {
     setToast(msg);
     setTimeout(() => setToast(null), 4000);
+  };
+
+  const closePosition = (symbol: string) => {
+    if (!window.confirm(`Sell the entire ${symbol} position at market?`)) return;
+    api.closePosition(symbol)
+      .then((r) => { showToast(`Closing ${symbol} (${r.quantity})`); refresh(); })
+      .catch((e) => showToast((e as Error).message));
   };
 
   if (error && !portfolio) {
@@ -164,20 +172,31 @@ export function App() {
               <h2>Positions</h2>
               {portfolio.positions.length > 0 ? (
                 <table>
-                  <thead><tr><th>Symbol</th><th>Qty</th><th>Avg</th><th>Last</th><th>Value</th><th>Unrealised P/L</th><th>Gain %</th><th>To stop-loss</th></tr></thead>
+                  <thead><tr><th>Symbol</th><th>Qty</th><th>Avg</th><th>Last</th><th>Value</th><th>Unrealised P/L</th><th>P/L %</th><th>To stop-loss</th><th></th></tr></thead>
                   <tbody>
                     {portfolio.positions.map((p) => (
-                      <tr key={p.symbol}>
-                        <td>{p.symbol}</td><td>{p.quantity}</td><td>{p.avg_price.toFixed(2)}</td>
-                        <td>{p.last_price.toFixed(2)}</td><td>{fmt(p.market_value)}</td>
-                        <td className={p.unrealized_pnl >= 0 ? "pos" : "neg"}>{p.unrealized_pnl.toFixed(2)}</td>
-                        <td className={(p.pnl_pct ?? 0) >= 0 ? "pos" : "neg"}>{(p.pnl_pct ?? 0) >= 0 ? "+" : ""}{(p.pnl_pct ?? 0).toFixed(2)}%</td>
-                        <td className={p.stop_distance_pct == null ? "muted" : p.stop_distance_pct <= 2 ? "neg" : "pos"}>
-                          {p.stop_distance_pct == null
-                            ? "no stop"
-                            : `${p.stop_distance_pct.toFixed(1)}% (@ ${p.stop_price?.toFixed(2)})`}
-                        </td>
-                      </tr>
+                      <Fragment key={p.symbol}>
+                        <tr>
+                          <td>{p.symbol}</td><td>{p.quantity}</td><td>{p.avg_price.toFixed(2)}</td>
+                          <td>{p.last_price.toFixed(2)}</td><td>{fmt(p.market_value)}</td>
+                          <td className={p.unrealized_pnl >= 0 ? "pos" : "neg"}>{p.unrealized_pnl.toFixed(2)}</td>
+                          <td className={(p.pnl_pct ?? 0) >= 0 ? "pos" : "neg"}>{(p.pnl_pct ?? 0) >= 0 ? "+" : ""}{(p.pnl_pct ?? 0).toFixed(2)}%</td>
+                          <td className={p.stop_distance_pct == null ? "muted" : p.stop_distance_pct <= 2 ? "neg" : "pos"}>
+                            {p.stop_distance_pct == null
+                              ? "no stop"
+                              : `${p.stop_distance_pct.toFixed(1)}% (@ ${p.stop_price?.toFixed(2)})`}
+                          </td>
+                          <td>
+                            <button className="danger" style={{ padding: "2px 8px", fontSize: 12 }}
+                              onClick={() => closePosition(p.symbol)}>Sell</button>
+                          </td>
+                        </tr>
+                        <tr>
+                          <td colSpan={9} style={{ padding: "2px 8px 10px" }}>
+                            <PositionChart symbol={p.symbol} entry={p.avg_price} />
+                          </td>
+                        </tr>
+                      </Fragment>
                     ))}
                   </tbody>
                 </table>

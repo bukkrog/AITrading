@@ -271,10 +271,16 @@ class SaxoBrokerAdapter(BrokerAdapter):
         }
 
     # ---- Order routing -------------------------------------------------
-    def place_market_order(self, symbol: str, side: OrderSide, quantity: float) -> dict:
-        """Place a market order and return the raw Saxo response (has OrderId)."""
+    def place_market_order(
+        self, symbol: str, side: OrderSide, quantity: float, uic: int | None = None
+    ) -> dict:
+        """Place a market order and return the raw Saxo response (has OrderId).
+
+        Pass ``uic`` to skip symbol resolution (e.g. closing a known position).
+        """
         account_key, _ = self._ensure_account()
-        uic = self.resolve_uic(symbol)
+        if uic is None:
+            uic = self.resolve_uic(symbol)
         payload = {
             "AccountKey": account_key,
             "Uic": uic,
@@ -306,6 +312,23 @@ class SaxoBrokerAdapter(BrokerAdapter):
         fill_price = (self.quote(uic) if uic else None) or reference_price
         logger.info("SAXO order %s placed; recorded fill @ %.4f", order_id, fill_price)
         return FillResult(price=fill_price, commission=0.0, slippage=0.0)
+
+    def close_position(self, symbol: str) -> dict:
+        """Market-close an open Saxo position identified by its displayed symbol."""
+        positions = self.positions_normalized()
+        base = symbol.split(":")[0].upper()
+        match = next(
+            (p for p in positions
+             if str(p["symbol"]).upper() == symbol.upper()
+             or str(p["symbol"]).split(":")[0].upper() == base),
+            None,
+        )
+        if not match:
+            raise TradingPlatformError(f"No open Saxo position for '{symbol}'.")
+        qty = match["quantity"]
+        side = OrderSide.SELL if qty > 0 else OrderSide.BUY
+        result = self.place_market_order(match["symbol"], side, abs(qty), uic=match["uic"])
+        return {"closed": match["symbol"], "quantity": abs(qty), "order": result}
 
     def cancel_order(self, order_id: str) -> dict:
         account_key, _ = self._ensure_account()
@@ -363,17 +386,30 @@ class SaxoBrokerAdapter(BrokerAdapter):
             pv = p.get("PositionView", {})
             df = p.get("DisplayAndFormat", {})
             qty = pb.get("Amount") or 0.0
-            cur = pv.get("CurrentPrice")
+            open_price = pb.get("OpenPrice") or 0.0
+            pnl = pv.get("ProfitLossOnTrade") or 0.0
+            cur = pv.get("CurrentPrice") or 0.0
+            market_value = pv.get("MarketValue") or 0.0
+            # When the market is closed Saxo returns CurrentPrice/MarketValue = 0
+            # but still gives ProfitLossOnTrade. Derive value + last price from the
+            # cost basis + P&L so the dashboard is never blank.
+            cost_basis = open_price * qty
+            if not market_value:
+                market_value = cost_basis + pnl
+            if not cur and qty:
+                cur = market_value / qty
+            pnl_pct = round(pnl / cost_basis * 100, 2) if cost_basis else 0.0
             out.append(
                 {
                     "symbol": df.get("Symbol") or str(pb.get("Uic")),
                     "uic": pb.get("Uic"),
                     "asset_type": pb.get("AssetType"),
                     "quantity": qty,
-                    "avg_price": pb.get("OpenPrice") or 0.0,
-                    "last_price": cur or 0.0,
-                    "market_value": (qty * cur) if (cur and pb.get("AssetType") == "Stock") else 0.0,
-                    "unrealized_pnl": pv.get("ProfitLossOnTrade") or 0.0,
+                    "avg_price": open_price,
+                    "last_price": round(cur, 4),
+                    "market_value": round(market_value, 2),
+                    "unrealized_pnl": pnl,
+                    "pnl_pct": pnl_pct,
                     "currency": df.get("Currency"),
                 }
             )

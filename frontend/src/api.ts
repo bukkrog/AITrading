@@ -101,6 +101,10 @@ export const api = {
   streamingStop: () => post<{ stopped: boolean }>("/control/streaming/stop"),
   setAllocation: (amount: number) =>
     post<{ cash: number }>(`/control/allocation?amount=${amount}`),
+  closePosition: (symbol: string) =>
+    post<{ closed: string; quantity: number }>(`/control/close-position?symbol=${encodeURIComponent(symbol)}`),
+  positionHistory: (symbol: string) =>
+    get<{ symbol: string; base: string; closes: number[] }>(`/portfolio/history?symbol=${encodeURIComponent(symbol)}`),
   saxoTest: () =>
     get<{ connected: boolean; environment?: string; error?: string; balance?: Record<string, unknown>; account_key?: string }>(
       "/control/saxo-test",

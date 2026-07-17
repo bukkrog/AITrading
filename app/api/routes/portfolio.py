@@ -25,7 +25,16 @@ def _enrich(pos: dict) -> dict:
     """
     avg = pos.get("avg_price") or 0.0
     last = pos.get("last_price") or avg
-    pos["pnl_pct"] = round((last - avg) / avg * 100, 2) if avg else 0.0
+    qty = pos.get("quantity") or 0.0
+    # Prefer a broker-supplied P/L % (Saxo computes it even when the market is
+    # closed); else from last-vs-entry; else from unrealized P&L over cost basis.
+    if pos.get("pnl_pct") is None:
+        if last and avg and last > 0:
+            pos["pnl_pct"] = round((last - avg) / avg * 100, 2)
+        elif avg and qty:
+            pos["pnl_pct"] = round((pos.get("unrealized_pnl") or 0.0) / (avg * qty) * 100, 2)
+        else:
+            pos["pnl_pct"] = 0.0
     slp = settings.stop_loss_pct
     if slp and slp > 0 and avg:
         stop_price = avg * (1 - slp)
@@ -75,6 +84,7 @@ def _saxo_portfolio(engine: PortfolioEngine) -> dict | None:
                 "last_price": round(p["last_price"], 4),
                 "market_value": round(p["market_value"], 2),
                 "unrealized_pnl": round(p["unrealized_pnl"], 2),
+                "pnl_pct": p.get("pnl_pct"),
             })
             for p in snap["positions"]
         ],
@@ -137,6 +147,21 @@ def attribution(session: Session = Depends(get_session)) -> dict:
             for r in a.per_symbol
         ],
     }
+
+
+@router.get("/history")
+def position_history(symbol: str, limit: int = 60, session: Session = Depends(get_session)) -> dict:
+    """Recent closing prices for a held symbol, for the per-position mini chart.
+
+    Best-effort: the Saxo display symbol (e.g. ``MAN:xnys``) is reduced to its
+    base ticker to look up stored bars. Returns an empty series if none exist.
+    """
+    base = symbol.split(":")[0]
+    df = get_bars_df(session, base)
+    if not len(df):
+        df = get_bars_df(session, symbol)  # fall back to the exact symbol
+    closes = [round(float(c), 4) for c in df["close"].tail(limit)] if len(df) else []
+    return {"symbol": symbol, "base": base, "closes": closes}
 
 
 @router.get("/snapshots")
