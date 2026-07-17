@@ -300,6 +300,20 @@ def run_cycle(
                     message=f"Skipped {sym}: notional {notional:.0f} < min {settings.min_trade_notional:.0f}.",
                 )
                 continue
+            # Binary-event veto (P1.5): don't open into a known coin-flip
+            # (earnings/FDA within event_veto_days) — stops can't protect gaps.
+            try:
+                from app.services import event_risk
+
+                event = event_risk.check(sym)
+            except Exception:
+                event = None
+            if event:
+                audit_log_service.record(
+                    session, AuditCategory.ORDER, "event_veto", symbol=sym,
+                    message=f"Skipped {sym}: binary event ahead ({event['detail']}).",
+                )
+                continue
             try:
                 pipe.execution_agent.execute(
                     TradeProposal(

@@ -141,6 +141,19 @@ class Settings(BaseSettings):
     # Decision thresholds (0–100). A trade needs BOTH scores strictly above.
     quant_score_threshold: float = 70.0
     news_score_threshold: float = 70.0
+    # How news participates in the entry decision (quant audit P1.5):
+    #   "gate"     -> news score AND bullish news direction are hard requirements
+    #                 (original behaviour; headline noise blocks technical setups).
+    #   "advisory" -> news is recorded and shown but only quant gates the entry;
+    #                 protection against news-driven blowups moves to the event
+    #                 veto below, which is a far sharper instrument.
+    news_gate_mode: Literal["gate", "advisory"] = "advisory"
+
+    # ---- Event risk veto (P1.5) --------------------------------------
+    # Block NEW entries within this many days of a known binary event (earnings
+    # via yfinance calendar; FDA/court/M&A via Claude when AI is configured).
+    # This is where news/AI genuinely protects capital. 0 disables.
+    event_veto_days: int = 5
 
     # ---- Exit rules (v8) --------------------------------------------
     # Automatic sell triggers, on top of the momentum exit (quant < 50). All are

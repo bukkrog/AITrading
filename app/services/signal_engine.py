@@ -63,18 +63,24 @@ def evaluate(
     reasons: list[str] = []
 
     quant_ok = quant.score > settings.quant_score_threshold
-    news_ok = news.score > settings.news_score_threshold
-    bullish = (
-        quant.direction in (SignalDirection.BULLISH, SignalDirection.BULLISH.value)
-        and news.direction in (SignalDirection.BULLISH, SignalDirection.BULLISH.value)
-    )
+    quant_bullish = quant.direction in (SignalDirection.BULLISH, SignalDirection.BULLISH.value)
+    news_bullish = news.direction in (SignalDirection.BULLISH, SignalDirection.BULLISH.value)
+
+    if settings.news_gate_mode == "advisory":
+        # News is recorded/displayed but does not gate technical entries; the
+        # event veto (event_risk) carries the capital-protection duty instead.
+        news_ok = True
+        bullish = quant_bullish
+    else:  # "gate" — original strict behaviour
+        news_ok = news.score > settings.news_score_threshold
+        bullish = quant_bullish and news_bullish
 
     if not quant_ok:
         reasons.append(f"Quant {quant.score:.1f} <= {settings.quant_score_threshold:.0f}.")
-    if not news_ok:
+    if settings.news_gate_mode != "advisory" and not news_ok:
         reasons.append(f"News {news.score:.1f} <= {settings.news_score_threshold:.0f}.")
     if not bullish:
-        reasons.append("Not unanimously bullish (long-only MVP).")
+        reasons.append("Not bullish (long-only MVP).")
 
     # Only consult the risk engine when the score gates already pass.
     if quant_ok and news_ok and bullish:

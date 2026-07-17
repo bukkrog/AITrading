@@ -50,6 +50,77 @@ def test_every_strategy_scores_and_signals():
         assert set(sig.dropna().unique()) <= {-1.0, 0.0, 1.0}, f"{name} bad signal values"
 
 
+def test_event_veto_disabled_paths(monkeypatch):
+    from app.config import settings
+    from app.services import event_risk
+
+    monkeypatch.setattr(settings, "market_data_source", "synthetic")
+    assert event_risk.check("AAPL") is None  # hermetic guard: no network
+    monkeypatch.setattr(settings, "market_data_source", "yfinance")
+    monkeypatch.setattr(settings, "event_veto_days", 0)
+    assert event_risk.check("AAPL") is None  # disabled
+
+
+def test_event_veto_blocks_near_earnings(monkeypatch):
+    from datetime import date, timedelta
+
+    from app.config import settings
+    from app.services import event_risk
+
+    monkeypatch.setattr(settings, "market_data_source", "yfinance")
+    monkeypatch.setattr(settings, "event_veto_days", 5)
+    event_risk._CACHE.clear()
+    monkeypatch.setattr(event_risk, "_next_earnings_date",
+                        lambda s: date.today() + timedelta(days=2))
+    monkeypatch.setattr(event_risk, "_ai_binary_event", lambda s, d: None)
+    v = event_risk.check("TEST")
+    assert v and v["type"] == "earnings"
+    # Far-away earnings -> no veto.
+    event_risk._CACHE.clear()
+    monkeypatch.setattr(event_risk, "_next_earnings_date",
+                        lambda s: date.today() + timedelta(days=30))
+    assert event_risk.check("TEST") is None
+
+
+def test_news_advisory_mode_gates_on_quant_only(monkeypatch):
+    from app.config import settings
+    from app.core.enums import SignalDirection
+    from app.services import signal_engine
+
+    # Advisory: neutral news must NOT block; gate: it must.
+    class _Q:  # bullish quant above threshold
+        def analyze(self, s, df):
+            from app.schemas.trading import QuantScore
+            return QuantScore(symbol=s, score=90.0, direction=SignalDirection.BULLISH, rationale="q")
+
+    class _N:  # neutral news at 50
+        def analyze(self, s, h):
+            from app.schemas.trading import NewsScore
+            return NewsScore(symbol=s, score=50.0, direction=SignalDirection.NEUTRAL, rationale="n")
+
+    class _R:
+        def assess(self, s, side, px, prices, **kw):
+            from app.schemas.trading import RiskAssessment
+            return RiskAssessment(approved=True, risk_score=10.0, approved_quantity=1, reasons=["ok"])
+
+    import pandas as pd
+    idx = pd.date_range("2024-01-01", periods=60, freq="D", tz="UTC")
+    df = pd.DataFrame({"open": 100.0, "high": 101.0, "low": 99.0, "close": 100.0, "volume": 1e6}, index=idx)
+
+    from app.data.database import session_scope
+    monkeypatch.setattr(settings, "quant_score_threshold", 70.0)
+    monkeypatch.setattr(settings, "news_score_threshold", 70.0)
+    with session_scope() as session:
+        monkeypatch.setattr(settings, "news_gate_mode", "advisory")
+        r1 = signal_engine.evaluate(session, "TEST", df, {"TEST": 100.0},
+                                    quant_agent=_Q(), news_agent=_N(), risk_agent=_R())
+        monkeypatch.setattr(settings, "news_gate_mode", "gate")
+        r2 = signal_engine.evaluate(session, "TEST", df, {"TEST": 100.0},
+                                    quant_agent=_Q(), news_agent=_N(), risk_agent=_R())
+    assert r1.approved is True   # advisory: quant alone decides
+    assert r2.approved is False  # gate: neutral news blocks
+
+
 def test_insufficient_history_is_neutral():
     tiny = _synthetic_df(5)
     for cls in STRATEGY_REGISTRY.values():

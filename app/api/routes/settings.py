@@ -44,6 +44,8 @@ class SettingsUpdate(BaseModel):
     # Decision gates
     quant_score_threshold: float | None = None
     news_score_threshold: float | None = None
+    news_gate_mode: str | None = None
+    event_veto_days: int | None = None
     # Exit rules
     stop_loss_pct: float | None = None
     take_profit_pct: float | None = None
@@ -113,6 +115,8 @@ def _view() -> dict:
         "active_strategy": settings.active_strategy,
         "quant_score_threshold": settings.quant_score_threshold,
         "news_score_threshold": settings.news_score_threshold,
+        "news_gate_mode": settings.news_gate_mode,
+        "event_veto_days": settings.event_veto_days,
         "stop_loss_pct": settings.stop_loss_pct,
         "take_profit_pct": settings.take_profit_pct,
         "trailing_stop_pct": settings.trailing_stop_pct,
@@ -149,6 +153,7 @@ def _view() -> dict:
             "default_broker_mode": ["simulation", "saxo"],
             "market_data_source": ["synthetic", "yfinance", "saxo"],
             "active_strategy": _strategy_names(),
+            "news_gate_mode": ["advisory", "gate"],
             "discovery_sources": [
                 "day_gainers", "most_actives", "small_cap_gainers",
                 "aggressive_small_caps", "growth_tech", "wsb", "sp500", "dow30",
