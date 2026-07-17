@@ -105,8 +105,19 @@ class SaxoBrokerAdapter(BrokerAdapter):
             raise TradingPlatformError(f"Saxo {resp.status_code} on {path}: {json.dumps(body)[:500]}")
 
     def _get(self, path: str, params: dict | None = None) -> dict:
+        import time as _t
+
         with self._client() as c:
-            resp = c.get(path, params=params or {})
+            for attempt in range(3):
+                resp = c.get(path, params=params or {})
+                if resp.status_code == 429 and attempt < 2:
+                    # Rate limited — respect Retry-After (or brief backoff) and retry.
+                    wait = float(resp.headers.get("Retry-After") or (0.7 * (attempt + 1)))
+                    logger.warning("Saxo 429 on %s — retrying in %.1fs", path, wait)
+                    _t.sleep(min(wait, 3.0))
+                    continue
+                self._check(resp)
+                return resp.json()
             self._check(resp)
             return resp.json()
 

@@ -149,26 +149,37 @@ def attribution(session: Session = Depends(get_session)) -> dict:
     }
 
 
+_REALIZED_CACHE: dict = {"ts": 0.0, "data": None}
+_REALIZED_TTL = 30.0  # closed trades change slowly; don't re-pull on every UI poll
+
+
 @router.get("/realized")
 def realized_by_symbol(session: Session = Depends(get_session)) -> dict:
     """Realized (closed-trade) P&L per stock — which names you actually made/lost on."""
+    import time as _t
+
     engine = PortfolioEngine(session)
     if engine.broker_mode.value == "saxo":
         from app.core.enums import BrokerMode
         from app.execution.broker_adapter import build_broker
+        from app.portfolio.engine import cached_saxo_state
 
+        if _REALIZED_CACHE["data"] is not None and (_t.monotonic() - _REALIZED_CACHE["ts"]) < _REALIZED_TTL:
+            return _REALIZED_CACHE["data"]
         try:
             adapter = build_broker(BrokerMode.SAXO)
             rows = adapter.closed_pnl_by_symbol()
-            currency = (adapter.balance() or {}).get("currency")
+            currency = (cached_saxo_state() or {}).get("currency")  # avoid an extra balance call
         except Exception as exc:
             return {"source": "saxo", "error": str(exc)[:200], "per_symbol": [], "total": 0.0}
-        return {
+        data = {
             "source": "saxo",
             "currency": currency,
             "per_symbol": rows,
             "total": round(sum(r["realized_pnl"] for r in rows), 2),
         }
+        _REALIZED_CACHE.update(ts=_t.monotonic(), data=data)
+        return data
     # Paper: realized P&L from the local FIFO attribution.
     positions = engine.positions()
     prices = _prices(session, [p.symbol for p in positions])

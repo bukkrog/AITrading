@@ -135,6 +135,15 @@ def set_broker_mode(mode: BrokerMode, session: Session = Depends(get_session)) -
 def broker_health(session: Session = Depends(get_session)) -> dict:
     """Connectivity/status of the currently selected broker."""
     engine = PortfolioEngine(session)
+    # For Saxo, reuse the shared cached snapshot when it's fresh so this frequent
+    # UI poll doesn't hit Saxo's rate limit with its own balance/account calls.
+    if engine.broker_mode is BrokerMode.SAXO:
+        from app.portfolio.engine import cached_saxo_state
+
+        st = cached_saxo_state()
+        if st is not None:
+            return {"broker": "saxo", "connected": True,
+                    "environment": settings.saxo_environment, "cached": True}
     try:
         broker = build_broker(engine.broker_mode)
         return broker.health()

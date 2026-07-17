@@ -29,7 +29,16 @@ logger = get_logger(__name__)
 # Shared short-TTL cache for the live Saxo account snapshot so many
 # PortfolioEngine instances (per request / per UI poll) collapse into one call.
 _SAXO_CACHE: dict = {"ts": 0.0, "state": None}
-_SAXO_TTL = 3.0
+_SAXO_TTL = 15.0  # UI polls often; balances/positions don't change fast enough to refetch every few seconds
+
+
+def cached_saxo_state() -> dict | None:
+    """The shared Saxo snapshot if still fresh, else None (no network call)."""
+    import time as _t
+
+    if _SAXO_CACHE["state"] is not None and (_t.monotonic() - _SAXO_CACHE["ts"]) < _SAXO_TTL:
+        return _SAXO_CACHE["state"]
+    return None
 
 
 def invalidate_saxo_cache() -> None:
