@@ -15,6 +15,7 @@ import type {
   SettingsView,
   Signal,
   Snapshot,
+  StreamingStatus,
 } from "./types";
 
 // Base URL for the API. Override with VITE_API_BASE at build time; defaults to
@@ -95,6 +96,9 @@ export const api = {
     post<{ universe: string[] }>(`/discovery/apply${topN ? `?top_n=${topN}` : ""}`),
   discoveryStatus: () => get<DiscoveryStatus>("/discovery/status"),
   marketHours: () => get<MarketHours>("/automation/market-hours"),
+  streamingStatus: () => get<StreamingStatus>("/control/streaming/status"),
+  streamingStart: () => post<{ started: boolean; error?: string; symbols?: string[] }>("/control/streaming/start"),
+  streamingStop: () => post<{ stopped: boolean }>("/control/streaming/stop"),
   setAllocation: (amount: number) =>
     post<{ cash: number }>(`/control/allocation?amount=${amount}`),
   saxoTest: () =>

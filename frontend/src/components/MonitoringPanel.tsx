@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { api } from "../api";
-import type { AutomationInfo, BrokerHealth, BrokerModeInfo, MarketHours, Monitoring, Portfolio } from "../types";
+import type { AutomationInfo, BrokerHealth, BrokerModeInfo, MarketHours, Monitoring, Portfolio, StreamingStatus } from "../types";
 
 function LimitBar({ label, value, limit, util }: { label: string; value: number; limit: number; util: number }) {
   const cls = util >= 90 ? "hot" : util >= 60 ? "mid" : "";
@@ -22,11 +22,12 @@ interface Props {
   marketHours: MarketHours | null;
   brokerMode: BrokerModeInfo | null;
   brokerHealth: BrokerHealth | null;
+  streaming: StreamingStatus | null;
   onChanged: () => void;
   onToast: (m: string) => void;
 }
 
-export function MonitoringPanel({ monitoring, automation, portfolio, marketHours, brokerMode, brokerHealth, onChanged, onToast }: Props) {
+export function MonitoringPanel({ monitoring, automation, portfolio, marketHours, brokerMode, brokerHealth, streaming, onChanged, onToast }: Props) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [interval, setIntervalSec] = useState(String(automation.state.interval_seconds));
@@ -91,6 +92,33 @@ export function MonitoringPanel({ monitoring, automation, portfolio, marketHours
               {e.open ? "🟢" : "🔴"} {e.name} ({e.local_time}, {e.hours})
               {!e.open && e.next_open_local ? ` · opens ${e.next_open_local}` : ""}
             </span>
+          ))}
+        </div>
+      )}
+
+      <div className="control-row" style={{ marginBottom: 12 }}>
+        <label className="field">Saxo streaming</label>
+        <span style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          {streaming?.running ? (
+            <>
+              <span className={`badge ${streaming.connected ? "ok" : ""}`}>
+                {streaming.connected ? "connected" : "connecting…"}
+              </span>
+              <span className="muted" style={{ fontSize: 11 }}>
+                {streaming.messages_received ?? 0} msgs · {streaming.reconnects ?? 0} reconnects
+              </span>
+              <button className="secondary" disabled={busy} onClick={() => act(api.streamingStop, "Streaming stopped")}>Stop</button>
+            </>
+          ) : (
+            <button className="secondary" disabled={busy} onClick={() => act(api.streamingStart, "Streaming started")}>Start streaming</button>
+          )}
+        </span>
+      </div>
+      {streaming?.running && streaming.prices_by_symbol && Object.keys(streaming.prices_by_symbol).length > 0 && (
+        <div className="muted" style={{ fontSize: 12, marginBottom: 12 }}>
+          Live prices:{" "}
+          {Object.entries(streaming.prices_by_symbol).map(([sym, px]) => (
+            <span key={sym} style={{ marginRight: 10 }}><strong>{sym}</strong> {px.toFixed(2)}</span>
           ))}
         </div>
       )}

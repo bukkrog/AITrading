@@ -249,6 +249,16 @@ export interface MarketHours {
   paused: boolean;
 }
 
+export interface StreamingStatus {
+  running: boolean;
+  connected?: boolean;
+  uics?: number[];
+  prices_by_symbol?: Record<string, number>;
+  messages_received?: number;
+  reconnects?: number;
+  last_error?: string | null;
+}
+
 export interface DiscoveryStatus {
   last_scan_at: string | null;
   next_earliest_at: string | null;

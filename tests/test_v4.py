@@ -81,6 +81,26 @@ def test_universe_gather_momentum_first_and_capped(monkeypatch):
     assert len(pool) == 4 and "AAPL" in pool
 
 
+def test_universe_intl_clean_keeps_suffixed_tickers():
+    from app.services import universe
+
+    cleaned = universe._clean_intl(
+        ["NOVO-B.CO", "MC.PA", "SAP.DE", "bad tick!", "MSFT", "waytoolongxxxx.CO"]
+    )
+    assert "NOVO-B.CO" in cleaned and "MC.PA" in cleaned and "SAP.DE" in cleaned
+    assert "MSFT" in cleaned
+    assert "bad tick!" not in cleaned and "waytoolongxxxx.CO" not in cleaned
+
+
+def test_universe_european_sources_gather():
+    from app.services import universe
+
+    # OMX C25 is a static list (no network); gather must keep .CO suffixes.
+    pool = universe.gather(["omxc25"], max_symbols=50)
+    assert "NOVO-B.CO" in pool
+    assert any(t.endswith(".CO") for t in pool)
+
+
 def test_set_allocation(session):
     pf = PortfolioEngine(session)
     pf.set_allocation(50_000, reset_positions=True)

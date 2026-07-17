@@ -130,7 +130,10 @@ def _view() -> dict:
             "saxo_environment": ["sim", "live"],
             "default_broker_mode": ["simulation", "saxo"],
             "market_data_source": ["synthetic", "yfinance", "saxo"],
-            "discovery_sources": ["day_gainers", "most_actives", "wsb", "sp500", "dow30"],
+            "discovery_sources": [
+                "day_gainers", "most_actives", "wsb", "sp500", "dow30",
+                "omxc25", "dax", "cac", "europe",
+            ],
         },
         "persistence": "runtime-only (not written to disk; set permanent values in .env)",
     }

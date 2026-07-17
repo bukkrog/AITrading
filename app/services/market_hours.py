@@ -23,9 +23,22 @@ EXCHANGES: dict[str, dict] = {
     "CO": {"name": "OMX Copenhagen", "tz": "Europe/Copenhagen", "open": (9, 0), "close": (17, 0)},
     "DE": {"name": "Xetra (DE)", "tz": "Europe/Berlin", "open": (9, 0), "close": (17, 30)},
     "LSE": {"name": "London (LSE)", "tz": "Europe/London", "open": (8, 0), "close": (16, 30)},
+    "PAR": {"name": "Euronext (Paris/Amsterdam/Brussels)", "tz": "Europe/Paris", "open": (9, 0), "close": (17, 30)},
+    "MIL": {"name": "Borsa Italiana (Milan)", "tz": "Europe/Rome", "open": (9, 0), "close": (17, 30)},
+    "MAD": {"name": "BME (Madrid)", "tz": "Europe/Madrid", "open": (9, 0), "close": (17, 30)},
+    "STO": {"name": "Nasdaq Stockholm", "tz": "Europe/Stockholm", "open": (9, 0), "close": (17, 30)},
+    "OSL": {"name": "Oslo Børs", "tz": "Europe/Oslo", "open": (9, 0), "close": (16, 20)},
+    "HEL": {"name": "Nasdaq Helsinki", "tz": "Europe/Helsinki", "open": (10, 0), "close": (18, 30)},
+    "SWX": {"name": "SIX Swiss", "tz": "Europe/Zurich", "open": (9, 0), "close": (17, 30)},
 }
 
-_SUFFIX = {".CO": "CO", ".DE": "DE", ".L": "LSE"}
+# Yahoo-style suffix -> exchange key.
+_SUFFIX = {
+    ".CO": "CO", ".DE": "DE", ".L": "LSE",
+    ".PA": "PAR", ".AS": "PAR", ".BR": "PAR", ".LS": "PAR",
+    ".MI": "MIL", ".MC": "MAD", ".ST": "STO", ".OL": "OSL", ".HE": "HEL",
+    ".SW": "SWX", ".VX": "SWX", ".Z": "SWX",
+}
 
 
 def exchange_for_symbol(symbol: str) -> str:

@@ -26,7 +26,8 @@ def test_parse_single_frame():
     frame = _frame("prices", {"Uic": 211, "Quote": {"Mid": 333.26}})
     out = parse_frames(frame)
     assert len(out) == 1
-    ref_id, msg = out[0]
+    msg_id, ref_id, msg = out[0]
+    assert msg_id == 1
     assert ref_id == "prices"
     assert msg["Uic"] == 211
 
@@ -34,7 +35,7 @@ def test_parse_single_frame():
 def test_parse_multiple_concatenated_frames():
     data = _frame("prices", {"Uic": 211}) + _frame("_heartbeat", {}) + _frame("prices", {"Uic": 261})
     out = parse_frames(data)
-    assert [r for r, _ in out] == ["prices", "_heartbeat", "prices"]
+    assert [r for _, r, _ in out] == ["prices", "_heartbeat", "prices"]
 
 
 def test_extract_price_variants():

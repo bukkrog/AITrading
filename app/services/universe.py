@@ -33,6 +33,38 @@ _DOW30 = [
 # Momentum/attention sources are ranked first when capping the pool.
 _MOMENTUM_KEYS = ("day_gainers", "most_actives", "wsb")
 
+# ---- European index constituents (curated subsets, Yahoo-suffixed tickers) --
+# Scored on yfinance like everything else. NOTE: these are curated large-cap
+# subsets, not exhaustive index memberships. Trading them requires the symbol to
+# resolve on Saxo (many large EU names do; illiquid ones may be skipped).
+_OMXC25 = [  # Copenhagen (.CO)
+    "NOVO-B.CO", "MAERSK-B.CO", "MAERSK-A.CO", "DSV.CO", "ORSTED.CO", "CARL-B.CO",
+    "GMAB.CO", "VWS.CO", "DANSKE.CO", "TRYG.CO", "COLO-B.CO", "NZYM-B.CO",
+    "ROCK-B.CO", "DEMANT.CO", "PNDORA.CO", "AMBU-B.CO", "ISS.CO", "NETC.CO",
+    "GN.CO", "BAVA.CO", "JYSK.CO", "SIM.CO", "TOP.CO", "FLS.CO",
+]
+_DAX = [  # Frankfurt / Xetra (.DE)
+    "SAP.DE", "SIE.DE", "ALV.DE", "DTE.DE", "AIR.DE", "MBG.DE", "BMW.DE", "VOW3.DE",
+    "BAS.DE", "BAYN.DE", "ADS.DE", "DB1.DE", "IFX.DE", "MRK.DE", "MUV2.DE", "DHL.DE",
+    "RWE.DE", "EOAN.DE", "VNA.DE", "HEN3.DE", "DTG.DE", "HNR1.DE", "SY1.DE", "CON.DE",
+]
+_CAC = [  # Paris (.PA)
+    "MC.PA", "OR.PA", "RMS.PA", "TTE.PA", "SAN.PA", "AIR.PA", "SU.PA", "AI.PA",
+    "EL.PA", "BNP.PA", "DG.PA", "CS.PA", "SAF.PA", "KER.PA", "BN.PA", "CAP.PA",
+    "ENGI.PA", "ORA.PA", "VIE.PA", "GLE.PA", "ACA.PA", "RI.PA", "ML.PA",
+]
+_EURO_OTHER = [  # Amsterdam/Swiss/Milan/Madrid/Stockholm/Oslo/London majors
+    "ASML.AS", "PRX.AS", "INGA.AS", "ADYEN.AS",
+    "NESN.SW", "NOVN.SW", "ROG.SW", "UBSG.SW",
+    "ISP.MI", "ENEL.MI", "ENI.MI", "STLAM.MI",
+    "SAN.MC", "IBE.MC", "ITX.MC",
+    "VOLV-B.ST", "ERIC-B.ST", "ATCO-A.ST", "NDA-SE.ST",
+    "EQNR.OL", "DNB.OL",
+    "SHEL.L", "AZN.L", "HSBA.L", "ULVR.L", "BP.L",
+]
+# Sources whose tickers carry exchange suffixes / hyphens (skip the US cleaner).
+_INTL_SOURCES = {"omxc25", "dax", "cac", "europe"}
+
 # Cache for the ranked result so re-screening throttles under fast ticks.
 _CACHE: dict = {"key": None, "ts": 0.0, "ranked": None}
 _CACHE_TTL = 600.0  # 10 minutes
@@ -61,6 +93,28 @@ def _clean(tickers: list[str]) -> list[str]:
         s = str(t).strip().upper()
         # Skip blanks, class-share dots (BRK.B), and obvious non-equity noise.
         if not s or "." in s or "/" in s or len(s) > 5 or not s.isalpha():
+            continue
+        if s not in seen:
+            seen.add(s)
+            out.append(s)
+    return out
+
+
+def _clean_intl(tickers: list[str]) -> list[str]:
+    """Cleaner for suffixed international tickers (e.g. NOVO-B.CO, MC.PA).
+
+    Allows a single exchange suffix and a class hyphen; drops blanks/dupes and
+    obvious junk. Kept separate from ``_clean`` so US screener filtering (which
+    drops any dotted ticker) is unchanged.
+    """
+    import re
+
+    pat = re.compile(r"^[A-Z0-9]{1,5}(-[A-Z0-9]{1,3})?(\.[A-Z]{1,3})?$")
+    out: list[str] = []
+    seen = set()
+    for t in tickers:
+        s = str(t).strip().upper()
+        if not s or len(s) > 12 or not pat.match(s):
             continue
         if s not in seen:
             seen.add(s)
@@ -109,6 +163,11 @@ SOURCES = {
     "day_gainers": lambda: _yahoo_screen("day_gainers"),
     "most_actives": lambda: _yahoo_screen("most_actives"),
     "wsb": _wsb,
+    # European markets (curated large-cap subsets).
+    "omxc25": lambda: list(_OMXC25),
+    "dax": lambda: list(_DAX),
+    "cac": lambda: list(_CAC),
+    "europe": lambda: _OMXC25 + _DAX + _CAC + _EURO_OTHER,
 }
 
 
@@ -125,7 +184,8 @@ def gather(source_keys: list[str], max_symbols: int = 100) -> list[str]:
         if fn is None:
             continue
         try:
-            syms = _clean(fn())
+            raw = fn()
+            syms = _clean_intl(raw) if key in _INTL_SOURCES else _clean(raw)
         except Exception as exc:  # pragma: no cover - network path
             logger.warning("universe source %s failed: %s", key, exc)
             continue

@@ -20,6 +20,7 @@ import type {
   Portfolio,
   Signal,
   Snapshot,
+  StreamingStatus,
 } from "./types";
 
 const fmt = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 0 });
@@ -36,6 +37,7 @@ export function App() {
   const [monitoring, setMonitoring] = useState<Monitoring | null>(null);
   const [automation, setAutomation] = useState<AutomationInfo | null>(null);
   const [marketHours, setMarketHours] = useState<MarketHours | null>(null);
+  const [streaming, setStreaming] = useState<StreamingStatus | null>(null);
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -66,6 +68,7 @@ export function App() {
       setError(null);
       api.brokerHealth().then(setBrokerHealth).catch(() => setBrokerHealth(null));
       api.marketHours().then(setMarketHours).catch(() => setMarketHours(null));
+      api.streamingStatus().then(setStreaming).catch(() => setStreaming(null));
     } catch (e) {
       setError((e as Error).message);
     }
@@ -209,7 +212,7 @@ export function App() {
         {view === "trading" && monitoring && automation && portfolio && brokerMode && (
           <>
             <div className="grid two-col">
-              <MonitoringPanel monitoring={monitoring} automation={automation} portfolio={portfolio} marketHours={marketHours} brokerMode={brokerMode} brokerHealth={brokerHealth} onChanged={refresh} onToast={showToast} />
+              <MonitoringPanel monitoring={monitoring} automation={automation} portfolio={portfolio} marketHours={marketHours} brokerMode={brokerMode} brokerHealth={brokerHealth} streaming={streaming} onChanged={refresh} onToast={showToast} />
               <AlertsPanel alerts={alerts} onChanged={refresh} />
             </div>
             <div className="card section-gap">

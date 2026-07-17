@@ -53,8 +53,8 @@ def _streaming_ws_url(environment: str) -> str:
     return _STREAMING_WS.get(environment, _STREAMING_WS["sim"])
 
 
-def parse_frames(data: bytes) -> list[tuple[str, object]]:
-    """Parse one WS binary payload into a list of (reference_id, message).
+def parse_frames(data: bytes) -> list[tuple[int, str, object]]:
+    """Parse one WS binary payload into a list of (msg_id, reference_id, message).
 
     Envelope per message (little-endian):
       0   : msg id            (8 bytes, uint64)
@@ -66,9 +66,10 @@ def parse_frames(data: bytes) -> list[tuple[str, object]]:
       16+N: payload           (payload-length bytes)
     Multiple messages may be concatenated in one frame.
     """
-    out: list[tuple[str, object]] = []
+    out: list[tuple[int, str, object]] = []
     i, n = 0, len(data)
     while i + 11 <= n:
+        msg_id = struct.unpack_from("<Q", data, i)[0]
         # msg id (8) + reserved (2) then ref-id size
         ref_size = data[i + 10]
         j = i + 11
@@ -88,7 +89,7 @@ def parse_frames(data: bytes) -> list[tuple[str, object]]:
                 msg = None
         else:
             msg = {"_protobuf": True, "_bytes": len(payload)}
-        out.append((ref_id, msg))
+        out.append((msg_id, ref_id, msg))
         i = j
     return out
 
@@ -133,10 +134,13 @@ class SaxoStreamingClient:
         self.connected: bool = False
         self.messages_received: int = 0
         self.last_error: str | None = None
+        self.reconnects: int = 0
 
         self._uics: list[int] = []
         self._thread: threading.Thread | None = None
         self._stop = threading.Event()
+        self._last_msg_id: int | None = None
+        self._subscribed: bool = False
 
     # ---- REST subscription -------------------------------------------
     def _create_subscription(self, uics: list[int]) -> dict:
@@ -178,10 +182,7 @@ class SaxoStreamingClient:
             return
         if ref_id == _CTRL_RESET:
             logger.info("Saxo streaming: reset requested — re-subscribing.")
-            try:
-                self._create_subscription(self._uics)
-            except Exception as exc:  # pragma: no cover
-                self.last_error = str(exc)
+            self._subscribed = False  # the _run loop re-subscribes on the live channel
             return
         if ref_id != self._ref_id:
             return
@@ -198,40 +199,55 @@ class SaxoStreamingClient:
 
     # ---- WebSocket loop ----------------------------------------------
     async def _run(self) -> None:
+        """Connect, subscribe, and stream — with automatic reconnect/resume."""
         import websockets
 
-        url = f"{_streaming_ws_url(self._environment)}?contextId={self._context_id}"
-        try:
-            async with websockets.connect(
-                url,
-                additional_headers={"Authorization": f"Bearer {self._token}"},
-                max_size=None,
-                ping_interval=None,
-            ) as ws:
-                self.connected = True
-                logger.info("Saxo streaming connected (%s).", url)
-                # Subscribe only after the channel is up (Saxo's required order).
-                try:
-                    await asyncio.to_thread(self._create_subscription, self._uics)
-                except Exception as exc:
-                    self.last_error = str(exc)
-                    logger.error("Saxo streaming subscription failed: %s", exc)
-                    return
-                while not self._stop.is_set():
-                    try:
-                        raw = await asyncio.wait_for(ws.recv(), timeout=30.0)
-                    except asyncio.TimeoutError:
-                        continue
-                    if isinstance(raw, str):
-                        raw = raw.encode("utf-8")
-                    for ref_id, msg in parse_frames(raw):
-                        self.messages_received += 1
-                        self._dispatch(ref_id, msg)
-        except Exception as exc:
-            self.last_error = str(exc)
-            logger.exception("Saxo streaming loop error: %s", exc)
-        finally:
-            self.connected = False
+        base = _streaming_ws_url(self._environment)
+        backoff = 1.0
+        while not self._stop.is_set():
+            url = f"{base}?contextId={self._context_id}"
+            if self._last_msg_id is not None:  # resume from where we left off
+                url += f"&messageid={self._last_msg_id}"
+            try:
+                async with websockets.connect(
+                    url,
+                    additional_headers={"Authorization": f"Bearer {self._token}"},
+                    max_size=None,
+                    ping_interval=None,
+                ) as ws:
+                    self.connected = True
+                    backoff = 1.0
+                    logger.info("Saxo streaming connected (%s).", url)
+                    # (Re)create the subscription on the live channel if needed.
+                    if not self._subscribed:
+                        try:
+                            await asyncio.to_thread(self._create_subscription, self._uics)
+                            self._subscribed = True
+                        except Exception as exc:
+                            self.last_error = str(exc)
+                            logger.error("Saxo streaming subscription failed: %s", exc)
+                            return
+                    while not self._stop.is_set():
+                        try:
+                            raw = await asyncio.wait_for(ws.recv(), timeout=30.0)
+                        except asyncio.TimeoutError:
+                            continue
+                        if isinstance(raw, str):
+                            raw = raw.encode("utf-8")
+                        for msg_id, ref_id, msg in parse_frames(raw):
+                            self._last_msg_id = msg_id
+                            self.messages_received += 1
+                            self._dispatch(ref_id, msg)
+            except Exception as exc:
+                self.last_error = str(exc)
+                logger.warning("Saxo streaming disconnected: %s", exc)
+            finally:
+                self.connected = False
+            if self._stop.is_set():
+                break
+            self.reconnects += 1
+            await asyncio.sleep(min(backoff, 30.0))  # exponential backoff, capped
+            backoff *= 2
 
     def _main(self, uics: list[int]) -> None:
         self._uics = uics
@@ -250,6 +266,10 @@ class SaxoStreamingClient:
     def stop(self) -> None:
         self._stop.set()
 
+    def set_token(self, token: str) -> None:
+        """Swap in a refreshed bearer token; used on the next (re)connection."""
+        self._token = token
+
     def status(self) -> dict:
         return {
             "connected": self.connected,
@@ -257,5 +277,6 @@ class SaxoStreamingClient:
             "uics": self._uics,
             "prices": {str(k): v for k, v in self.latest.items()},
             "messages_received": self.messages_received,
+            "reconnects": self.reconnects,
             "last_error": self.last_error,
         }

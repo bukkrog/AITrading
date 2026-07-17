@@ -131,6 +131,17 @@ def _latest_prices(session: Session, symbols: list[str]) -> dict[str, float]:
         df = get_bars_df(session, sym)
         if len(df):
             prices[sym] = float(df["close"].iloc[-1])
+    # Overlay live streamed quotes when the Saxo stream carries them — this makes
+    # sizing and exit checks use the freshest price, not the last stored bar.
+    try:
+        from app.services import streaming_service
+
+        for sym in symbols:
+            streamed = streaming_service.latest_price(sym)
+            if streamed:
+                prices[sym] = streamed
+    except Exception:  # streaming optional — never let it break a cycle
+        pass
     return prices
 
 
