@@ -172,8 +172,15 @@ Giv derefter Claude denne kontekst som første besked (kopiér):
 6. ✅ Walk-forward-harness + deployment-bar: OOS Sharpe ≥0,8, ≥3 folds, ≥50%
    positive folds, maxDD >-20%. GET /backtest/walk-forward?symbol=&strategy=
 
-**Bevidst udskudt til PHASE 3:** portefølje-niveau vol-targeting (inverse-ATR-
-sizing pr. position ER implementeret via ATR-stops + 0,5% risiko; helporteføljens
-vol-skalering afventer ren snapshot-historik), point-in-time-univers-backtests
-(kræver at discovery_picks-loggen modnes), multi-faktor-ranker, PEAD/earnings-
-drift, Postgres + API-auth + ekstern alerting.
+**PHASE 3 GENNEMFØRT (17/7-2026, commits 317cf4d..dc57e61, 81 tests):**
+1. ✅ Multi-faktor-ranker afløser ROC20 (12-1-momentum 40% + trend 25% +
+   reversal-straf 20% + lav-vol 15%; 1 års data) — fixer auditens rodårsag
+2. ✅ API-nøgle-guard: sæt API_KEY → X-API-Key kræves på alle muterende kald
+   (frontend: localStorage.setItem("aitp_api_key", "...")).
+3. ✅ Webhook-alerting: ALERT_WEBHOOK_URL → kritiske alerts pushes
+   (Slack/Discord/Teams/ntfy)
+4. ✅ PEAD-faktor: nylig earnings-beat +5 / miss −8 på shortlisten
+
+**Bevidst udskudt (PHASE 4):** point-in-time-univers-backtests (venter på at
+discovery_picks-loggen modnes), portefølje-niveau vol-targeting (per-position
+inverse-ATR ER på plads), Postgres, filings/insider-AI-pipeline, execution-algos.
