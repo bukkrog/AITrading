@@ -90,6 +90,28 @@ export function SettingsMenu({ onChanged, onToast }: { onChanged: () => void; on
 
   const set = (k: string, v: unknown) => setForm((f) => ({ ...f, [k]: v }));
 
+  // Recommended exit presets per strategy (percent values + cooldown minutes),
+  // pre-filled when you pick a strategy so it's ready to use. Quick-flip keeps a
+  // tight take-profit ABOVE round-trip costs so fast flips still net a profit.
+  const STRATEGY_PRESETS: Record<string, { sl: number; tp: number; tr: number; cd: number }> = {
+    quick_flip: { sl: 1.5, tp: 1.0, tr: 0, cd: 2 },
+    momentum: { sl: 8, tp: 15, tr: 10, cd: 5 },
+    mean_reversion: { sl: 5, tp: 5, tr: 0, cd: 5 },
+    rsi2: { sl: 5, tp: 4, tr: 0, cd: 2 },
+    donchian: { sl: 10, tp: 0, tr: 12, cd: 5 },
+    macd: { sl: 8, tp: 0, tr: 10, cd: 5 },
+  };
+
+  const pickStrategy = (name: string) => {
+    const p = STRATEGY_PRESETS[name];
+    setForm((f) => ({
+      ...f,
+      active_strategy: name,
+      ...(p ? { stop_loss_pct: p.sl, take_profit_pct: p.tp, trailing_stop_pct: p.tr, trade_cooldown_minutes: p.cd } : {}),
+    }));
+    if (p) onToast(`${name}: pre-filled stop ${p.sl}% / take-profit ${p.tp}% / cooldown ${p.cd}m — adjust & Save`);
+  };
+
   // Fields shown/typed as percent but stored on the backend as fractions.
   const PCT_FIELDS = [
     "stop_loss_pct", "take_profit_pct", "trailing_stop_pct",
@@ -304,8 +326,8 @@ export function SettingsMenu({ onChanged, onToast }: { onChanged: () => void; on
         {/* --- Trading cadence & costs --- */}
         <div>
           <h3 style={{ fontSize: 13 }}>Cadence &amp; costs</h3>
-          <Field label="Active strategy" hint="Which strategy automation trades with. Quick-flip = fast in/out (pair with a take-profit above your costs). Backtest & compare them under Analytics.">
-            <select value={String(form.active_strategy)} onChange={(e) => set("active_strategy", e.target.value)}>
+          <Field label="Active strategy" hint="Which strategy automation trades with. Picking one pre-fills recommended stop-loss / take-profit / cooldown (edit them below, then Save). Backtest & compare under Analytics.">
+            <select value={String(form.active_strategy)} onChange={(e) => pickStrategy(e.target.value)}>
               {(opt.active_strategy ?? []).map((o) => {
                 const label = { momentum: "Momentum / trend", mean_reversion: "Mean-reversion", quick_flip: "Quick-flip (profit-target)", rsi2: "RSI(2) mean-reversion", donchian: "Donchian breakout (Turtle)", macd: "MACD / EMA-crossover" }[o] ?? o;
                 return <option key={o} value={o}>{label}</option>;
