@@ -1,0 +1,50 @@
+"""Unit tests for v9: Saxo streaming frame parsing (hermetic — no network)."""
+from __future__ import annotations
+
+import json
+import struct
+
+from app.execution.saxo_streaming import _extract_price, _streaming_ws_url, parse_frames
+
+
+def _frame(ref_id: str, payload: dict) -> bytes:
+    """Build one Saxo streaming binary message envelope."""
+    body = json.dumps(payload).encode("utf-8")
+    ref = ref_id.encode("ascii")
+    return (
+        struct.pack("<Q", 1)          # msg id (8)
+        + b"\x00\x00"                 # reserved (2)
+        + bytes([len(ref)])           # ref-id size (1)
+        + ref                         # ref id
+        + b"\x00"                     # payload format = JSON
+        + struct.pack("<I", len(body))  # payload size (4)
+        + body
+    )
+
+
+def test_parse_single_frame():
+    frame = _frame("prices", {"Uic": 211, "Quote": {"Mid": 333.26}})
+    out = parse_frames(frame)
+    assert len(out) == 1
+    ref_id, msg = out[0]
+    assert ref_id == "prices"
+    assert msg["Uic"] == 211
+
+
+def test_parse_multiple_concatenated_frames():
+    data = _frame("prices", {"Uic": 211}) + _frame("_heartbeat", {}) + _frame("prices", {"Uic": 261})
+    out = parse_frames(data)
+    assert [r for r, _ in out] == ["prices", "_heartbeat", "prices"]
+
+
+def test_extract_price_variants():
+    assert _extract_price({"Quote": {"Mid": 100.0}}) == 100.0
+    assert _extract_price({"Quote": {"Bid": 10.0, "Ask": 12.0}}) == 11.0
+    assert _extract_price({"PriceInfoDetails": {"LastTraded": 50.0}}) == 50.0
+    assert _extract_price({"Quote": {}}) is None
+    assert _extract_price("not-a-dict") is None
+
+
+def test_streaming_url_by_environment():
+    assert "sim-streaming.saxobank.com" in _streaming_ws_url("sim")
+    assert _streaming_ws_url("live").startswith("wss://streaming.saxobank.com")

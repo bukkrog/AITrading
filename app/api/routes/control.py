@@ -48,6 +48,28 @@ def get_broker_mode(session: Session = Depends(get_session)) -> dict:
     }
 
 
+@router.post("/streaming/start")
+def streaming_start(session: Session = Depends(get_session)) -> dict:
+    """Start Saxo price streaming for the current automation universe."""
+    from app.services import streaming_service
+
+    return streaming_service.start(session)
+
+
+@router.post("/streaming/stop")
+def streaming_stop() -> dict:
+    from app.services import streaming_service
+
+    return streaming_service.stop()
+
+
+@router.get("/streaming/status")
+def streaming_status() -> dict:
+    from app.services import streaming_service
+
+    return streaming_service.status()
+
+
 @router.post("/broker-mode")
 def set_broker_mode(mode: BrokerMode, session: Session = Depends(get_session)) -> dict:
     """Switch between 'simulation' and 'saxo'.
