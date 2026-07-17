@@ -1,34 +1,29 @@
-# ---- Core web / API ----
-fastapi==0.115.6
-uvicorn[standard]==0.34.0
-pydantic==2.10.4
-pydantic-settings==2.7.1
+# Pinned to the versions the platform is verified against (17 Jul 2026).
+# Install:  pip install -r requirements.txt
 
-# ---- Persistence ----
-SQLAlchemy==2.0.36
-# psycopg (binary) is only needed when DATABASE_URL points at PostgreSQL/TimescaleDB.
-# The default DATABASE_URL uses SQLite so the platform runs with zero infra.
-psycopg2-binary==2.9.10
+# ---- Core web / API ----
+fastapi==0.139.0
+uvicorn[standard]==0.51.0
+pydantic==2.13.4
+pydantic-settings==2.14.2
+
+# ---- Persistence (SQLite by default — zero infra) ----
+SQLAlchemy==2.0.51
 
 # ---- Data / numerics ----
-pandas==2.2.3
-numpy==2.2.1
+pandas==3.0.3
+numpy==2.5.1
 
-# ---- AI analysis layer ----
-anthropic==0.42.0
+# ---- Market data / news ----
+yfinance==1.5.1
+httpx==0.28.1
 
-# ---- Dashboard ----
-streamlit==1.41.1
-plotly==5.24.1
+# ---- Saxo streaming (WebSocket) ----
+websockets==16.1
+
+# ---- AI analysis layer (optional at runtime) ----
+anthropic==0.116.0
 
 # ---- Tooling / tests ----
-pytest==8.3.4
-httpx==0.28.1
-python-dotenv==1.0.1
-
-# ---- Market data / news feed (v4) ----
-yfinance==1.5.1
-
-# ---- Backtesting (v2 roadmap; MVP ships a lightweight built-in engine) ----
-# vectorbt==0.26.2
-# backtrader==1.9.78.123
+pytest==9.1.1
+python-dotenv==1.2.2

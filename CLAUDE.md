@@ -2,6 +2,9 @@
 
 Guidance for working in this repository.
 
+> **New machine?** Follow `ONBOARDING.md` — full setup recipe (venv, .env
+> template, tokens, run commands) + current status and the prioritized roadmap.
+
 ## What this is
 
 An AI-assisted, **controlled, paper-first** trading platform for Danish/global
