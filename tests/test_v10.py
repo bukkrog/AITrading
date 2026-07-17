@@ -121,6 +121,25 @@ def test_news_advisory_mode_gates_on_quant_only(monkeypatch):
     assert r2.approved is False  # gate: neutral news blocks
 
 
+def test_paper_slippage_scales_with_volatility():
+    from app.core.enums import OrderSide
+    from app.execution.paper_broker import PaperBroker
+    from app.schemas.trading import OrderRequest
+
+    broker = PaperBroker(commission_pct=0.0, slippage_bps=5.0, commission_per_trade=0.0)
+    # Quiet name: tight ATR stop (0.5% away at 2x ATR -> ATR ~0.25%).
+    quiet = broker.execute(OrderRequest(symbol="Q", side=OrderSide.BUY, quantity=1,
+                                        stop_price=99.5), 100.0)
+    # Volatile name: wide ATR stop (10% away -> ATR ~5%).
+    wild = broker.execute(OrderRequest(symbol="W", side=OrderSide.BUY, quantity=1,
+                                       stop_price=90.0), 100.0)
+    assert wild.slippage > quiet.slippage          # vol costs more
+    assert wild.slippage <= 100.0 * 0.01 + 1e-9    # capped at 1%
+    # No stop hint -> plain configured bps.
+    plain = broker.execute(OrderRequest(symbol="P", side=OrderSide.BUY, quantity=1), 100.0)
+    assert abs(plain.slippage - 100.0 * 5.0 / 10_000.0) < 1e-9
+
+
 def test_insufficient_history_is_neutral():
     tiny = _synthetic_df(5)
     for cls in STRATEGY_REGISTRY.values():

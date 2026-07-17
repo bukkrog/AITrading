@@ -36,6 +36,15 @@ class PaperBroker(BrokerAdapter):
     def execute(self, request: OrderRequest, reference_price: float) -> FillResult:
         side = OrderSide(request.side)
         slip = reference_price * (self.slippage_bps / 10_000.0)
+        # Volatility-aware slippage (Phase 2): a flat 5 bps flatters volatile /
+        # wide-spread names. When the order carries an ATR-based stop we can
+        # recover ATR = (ref - stop) / atr_multiple and estimate the effective
+        # half-spread as ~7.5% of daily ATR — use whichever is WORSE, capped 1%.
+        if request.stop_price and 0 < request.stop_price < reference_price:
+            mult = max(settings.risk.atr_stop_multiple, 0.5)
+            atr = (reference_price - request.stop_price) / mult
+            vol_slip = min(0.075 * atr, reference_price * 0.01)
+            slip = max(slip, vol_slip)
         fill_price = reference_price + slip if side is OrderSide.BUY else reference_price - slip
         commission = abs(fill_price * request.quantity) * self.commission_pct + self.commission_per_trade
         logger.info(
