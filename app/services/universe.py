@@ -310,6 +310,62 @@ def rank_by_momentum(symbols: list[str], top_n: int) -> list[dict]:
     return ranked[:top_n]
 
 
+# ---- PEAD: post-earnings-announcement drift (P3.4) -------------------------
+# Stocks that beat estimates drift UP for weeks after the report (one of the
+# most persistent documented anomalies); misses drift down. One HTTP call per
+# symbol per day, applied only to the top shortlist to keep scans fast.
+_PEAD_CACHE: dict[str, tuple] = {}  # symbol -> (checked_date, surprise_pct | None)
+
+
+def _earnings_surprise(symbol: str) -> float | None:
+    """Most recent earnings surprise %, if reported within the last 45 days."""
+    from datetime import date
+
+    import pandas as pd
+
+    today = date.today()
+    cached = _PEAD_CACHE.get(symbol)
+    if cached and cached[0] == today:
+        return cached[1]
+    val: float | None = None
+    try:
+        import yfinance as yf
+
+        ed = yf.Ticker(symbol).earnings_dates
+        if ed is not None and len(ed) and "Surprise(%)" in ed.columns:
+            idx = ed.index.tz_localize(None) if getattr(ed.index, "tz", None) else ed.index
+            now = pd.Timestamp.now()
+            past = ed[(idx <= now) & (idx >= now - pd.Timedelta(days=45))]
+            surprises = past["Surprise(%)"].dropna()
+            if len(surprises):
+                val = float(surprises.iloc[0])
+    except Exception:
+        val = None
+    _PEAD_CACHE[symbol] = (today, val)
+    return val
+
+
+def _apply_pead(ranked: list[dict], lookup, shortlist_n: int) -> list[dict]:
+    """Adjust scores on the top shortlist by recent earnings surprise (pure).
+
+    Beats (>2%) get +5; misses (<-2%) get -8 (drift is asymmetric — misses
+    bleed harder). Rows are COPIED so the cached ranking is never mutated.
+    Returns the full list re-sorted.
+    """
+    out = [dict(r) for r in ranked]
+    for r in out[:shortlist_n]:
+        s = lookup(r["symbol"])
+        if s is None:
+            continue
+        r["pead_surprise"] = s
+        if s > 2.0:
+            r["score"] = min(100.0, r["score"] + 5.0)
+        elif s < -2.0:
+            r["score"] = max(0.0, r["score"] - 8.0)
+    out.sort(key=lambda r: r["score"], reverse=True)
+    return out
+
+
 # Sector lookups are one HTTP call per NEW symbol; cache for the process life
 # (sectors don't change). Unknown/failed lookups are exempt from the cap so a
 # yfinance hiccup can never empty the universe.
@@ -408,9 +464,11 @@ def discover(
     # Re-check open status on the (cached) ranked list too, so a mid-cache
     # close is reflected without waiting for the next scan.
     ranked = [r for r in ranked_all if _is_open(r["symbol"])] if open_market_only else ranked_all
-    # Diversification caps: sector (P1.3) + pairwise correlation (P2.5).
+    # PEAD adjustment on the shortlist (P3.4), then diversification caps:
+    # sector (P1.3) + pairwise correlation (P2.5).
     from app.config import settings
 
+    ranked = _apply_pead(ranked, _earnings_surprise, max(top_n * 3, 15))
     return _apply_sector_cap(
         ranked, top_n, settings.discovery_max_sector_pct,
         max_corr=settings.discovery_max_correlation,

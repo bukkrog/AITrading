@@ -253,6 +253,21 @@ def test_critical_alert_pushes_webhook(session, monkeypatch):
     assert len(sent) == 1 and "critical thing" in sent[0]["text"]  # only CRITICAL pushes
 
 
+def test_pead_adjustment_reorders_without_mutating_cache():
+    from app.services.universe import _apply_pead
+
+    ranked = [
+        {"symbol": "MISS", "score": 90.0},   # recent big miss -> -8
+        {"symbol": "BEAT", "score": 88.0},   # recent beat -> +5
+        {"symbol": "NONE", "score": 85.0},   # no recent report -> unchanged
+    ]
+    lookup = {"MISS": -6.0, "BEAT": 9.0, "NONE": None}.get
+    out = _apply_pead(ranked, lookup, shortlist_n=3)
+    assert [r["symbol"] for r in out] == ["BEAT", "NONE", "MISS"]  # 93, 85, 82
+    assert ranked[0]["score"] == 90.0  # cached rows untouched (copies)
+    assert out[0]["pead_surprise"] == 9.0
+
+
 def test_insufficient_history_is_neutral():
     tiny = _synthetic_df(5)
     for cls in STRATEGY_REGISTRY.values():
