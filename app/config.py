@@ -81,6 +81,10 @@ class Settings(BaseSettings):
     # Runtime
     environment: str = "development"
     log_level: str = "INFO"
+    # When set, every MUTATING request (POST/PUT/DELETE) must carry the header
+    # ``X-API-Key`` with this value — otherwise anyone on the network can trade
+    # through the API. Unset = open (local development only!). Reads stay open.
+    api_key: str | None = None
 
     # Persistence
     database_url: str = "sqlite:///./trading.db"

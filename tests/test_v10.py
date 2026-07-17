@@ -219,6 +219,22 @@ def test_factor_score_prefers_steady_uptrend_over_spike():
     assert s_down < 50
 
 
+def test_api_key_guard(monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from app.config import settings
+    from app.main import app
+
+    client = TestClient(app)
+    monkeypatch.setattr(settings, "api_key", "s3cret")
+    assert client.get("/settings").status_code == 200                      # reads open
+    assert client.post("/settings", json={}).status_code == 401           # missing key
+    assert client.post("/settings", json={}, headers={"X-API-Key": "bad"}).status_code == 401
+    assert client.post("/settings", json={}, headers={"X-API-Key": "s3cret"}).status_code == 200
+    monkeypatch.setattr(settings, "api_key", None)
+    assert client.post("/settings", json={}).status_code == 200            # guard off
+
+
 def test_insufficient_history_is_neutral():
     tiny = _synthetic_df(5)
     for cls in STRATEGY_REGISTRY.values():

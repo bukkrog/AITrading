@@ -30,8 +30,15 @@ async function get<T>(path: string): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+// Optional API key (set once in the browser console when the backend enforces it):
+//   localStorage.setItem("aitp_api_key", "<your key>")
+const authHeaders = (): Record<string, string> => {
+  const k = localStorage.getItem("aitp_api_key");
+  return k ? { "X-API-Key": k } : {};
+};
+
 async function post<T>(path: string): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, { method: "POST" });
+  const res = await fetch(`${BASE}${path}`, { method: "POST", headers: authHeaders() });
   if (!res.ok) {
     const detail = await res.json().catch(() => ({}));
     throw new Error(detail.detail ?? `POST ${path} -> ${res.status}`);
@@ -42,7 +49,7 @@ async function post<T>(path: string): Promise<T> {
 async function postJson<T>(path: string, body: unknown): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...authHeaders() },
     body: JSON.stringify(body),
   });
   if (!res.ok) {

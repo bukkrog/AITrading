@@ -60,6 +60,19 @@ async def lifespan(app: FastAPI):
     logger.info("ai-trading-platform shutting down.")
 
 
+async def _api_key_guard(request, call_next):
+    """Require X-API-Key on mutating requests when settings.api_key is set."""
+    if (
+        settings.api_key
+        and request.method in ("POST", "PUT", "PATCH", "DELETE")
+        and request.headers.get("x-api-key") != settings.api_key
+    ):
+        from starlette.responses import JSONResponse
+
+        return JSONResponse(status_code=401, content={"detail": "invalid or missing X-API-Key"})
+    return await call_next(request)
+
+
 app = FastAPI(
     title="ai-trading-platform",
     version=__version__,
@@ -77,6 +90,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# API-key guard on mutating requests (active only when API_KEY is set).
+app.middleware("http")(_api_key_guard)
 
 app.include_router(health.router)
 app.include_router(portfolio.router)
