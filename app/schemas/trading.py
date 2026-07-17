@@ -61,6 +61,8 @@ class OrderRequest(BaseModel):
     order_type: OrderType = OrderType.MARKET
     limit_price: float | None = None
     signal_id: int | None = None
+    # Protective stop attached at entry (resting order at the broker on Saxo).
+    stop_price: float | None = None
 
 
 class SignalResult(BaseModel):

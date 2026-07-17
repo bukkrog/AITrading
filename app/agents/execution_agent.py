@@ -25,6 +25,7 @@ class ExecutionAgent:
             quantity=proposal.quantity,
             order_type=OrderType.MARKET,
             signal_id=proposal.signal_id,
+            stop_price=proposal.stop_price,
         )
         logger.info("ExecutionAgent executing %s %s x%.0f", proposal.side, proposal.symbol, proposal.quantity)
         return self.execution_engine.submit(request, proposal.reference_price)

@@ -353,11 +353,20 @@ class SaxoBrokerAdapter(BrokerAdapter):
             return resp.json()
 
     def execute(self, request: OrderRequest, reference_price: float) -> FillResult:
+        side = OrderSide(request.side)
+        # Selling/closing: clear any resting protective orders on the instrument
+        # first, or Saxo rejects with SellOrdersAlreadyExistForOwnedContracts.
+        if side is OrderSide.SELL:
+            try:
+                self.cancel_orders_for_uic(self.resolve_uic(request.symbol))
+            except Exception as exc:  # best effort — the sell may still succeed
+                logger.warning("pre-sell order cleanup failed for %s: %s", request.symbol, exc)
+
         # Deterministic client order id per signal: a retried submission of the
         # same trading intent carries the same reference (idempotency).
         ref = f"aitp-sig-{request.signal_id}" if request.signal_id else None
         result = self.place_market_order(
-            request.symbol, OrderSide(request.side), request.quantity, external_ref=ref
+            request.symbol, side, request.quantity, external_ref=ref
         )
         order_id = result.get("OrderId")
         # Market orders return only an OrderId; the executed price settles
@@ -365,6 +374,22 @@ class SaxoBrokerAdapter(BrokerAdapter):
         # fill price (falling back to the strategy's reference price).
         uic = self._uic_cache.get(request.symbol)
         fill_price = (self.quote(uic) if uic else None) or reference_price
+
+        # Attach the protective stop as a RESTING broker-side order (P1.7): it
+        # protects through downtime and overnight gaps. Best-effort — a failed
+        # stop placement must never unwind the fill; the in-process exit checks
+        # remain as the fallback layer.
+        if side is OrderSide.BUY and request.stop_price and request.stop_price > 0:
+            try:
+                self.place_stop_order(
+                    request.symbol, request.quantity, request.stop_price,
+                    uic=uic, external_ref=(f"aitp-stop-sig-{request.signal_id}"
+                                           if request.signal_id else None),
+                )
+            except Exception as exc:
+                logger.warning("resting stop for %s not placed (%s) — in-process "
+                               "exits still cover it", request.symbol, exc)
+
         logger.info("SAXO order %s placed; recorded fill @ %.4f", order_id, fill_price)
         return FillResult(price=fill_price, commission=0.0, slippage=0.0)
 
@@ -382,6 +407,7 @@ class SaxoBrokerAdapter(BrokerAdapter):
             raise TradingPlatformError(f"No open Saxo position for '{symbol}'.")
         qty = match["quantity"]
         side = OrderSide.SELL if qty > 0 else OrderSide.BUY
+        self.cancel_orders_for_uic(match["uic"])  # clear resting stops first
         result = self.place_market_order(match["symbol"], side, abs(qty), uic=match["uic"])
         return {"closed": match["symbol"], "quantity": abs(qty), "order": result}
 
@@ -400,6 +426,57 @@ class SaxoBrokerAdapter(BrokerAdapter):
                 return resp.json()
             self._check(resp)
             return resp.json()
+
+    def place_stop_order(
+        self, symbol: str, quantity: float, stop_price: float,
+        uic: int | None = None, external_ref: str | None = None,
+    ) -> dict:
+        """Place a RESTING sell-stop at the broker (GoodTillCancel).
+
+        Unlike the in-process exit checks, this protects the position while the
+        platform is down, between ticks, and through overnight gaps — the
+        broker enforces it (quant audit P1.7: never blow up).
+        """
+        import uuid
+
+        account_key, _ = self._ensure_account()
+        if uic is None:
+            uic = self.resolve_uic(symbol)
+        payload = {
+            "AccountKey": account_key,
+            "Uic": uic,
+            "AssetType": "Stock",
+            "Amount": quantity,
+            "BuySell": "Sell",
+            "OrderType": "StopIfTraded",
+            "OrderPrice": round(float(stop_price), 2),
+            "ManualOrder": False,
+            "OrderDuration": {"DurationType": "GoodTillCancel"},
+            "ExternalReference": (external_ref or f"aitp-stop-{uuid.uuid4().hex[:16]}")[:50],
+        }
+        logger.info("SAXO[%s] resting STOP %s x%.0f @ %.2f (uic=%s)",
+                    self.environment, symbol, quantity, stop_price, uic)
+        _pace_order()
+        with self._client() as c:
+            resp = c.post("/trade/v2/orders", json=payload)
+            self._check(resp)
+            return resp.json()
+
+    def cancel_orders_for_uic(self, uic: int) -> list[str]:
+        """Cancel resting orders on one instrument (before selling/closing it,
+        so the exit isn't rejected with SellOrdersAlreadyExist)."""
+        cancelled: list[str] = []
+        try:
+            for o in self.open_orders_normalized():
+                if o.get("uic") == uic and o.get("order_id"):
+                    try:
+                        self.cancel_order(str(o["order_id"]))
+                        cancelled.append(str(o["order_id"]))
+                    except Exception as exc:  # pragma: no cover - best effort
+                        logger.warning("SAXO cancel %s failed: %s", o["order_id"], exc)
+        except Exception as exc:  # pragma: no cover
+            logger.warning("SAXO order scan failed for uic %s: %s", uic, exc)
+        return cancelled
 
     def cancel_all_orders(self) -> list[str]:
         """Cancel every working order; returns the cancelled order IDs."""

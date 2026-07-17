@@ -129,10 +129,29 @@ def screen(session: Session, *, top_n: int | None = None, refresh: bool = True) 
 
 
 def apply_to_automation(session: Session, *, top_n: int | None = None) -> list[str]:
-    """Screen and set the automation universe to the discovered symbols."""
-    from app.services import automation
+    """Screen and set the automation universe to the discovered symbols.
 
-    picks = [c.symbol for c in screen(session, top_n=top_n)]
+    Every CHANGE of universe is recorded to the audit log with the full scored
+    candidate list — this accumulates the point-in-time discovery dataset that
+    honest (non-hindsight) backtests need (quant audit P1.7).
+    """
+    from app.core.enums import AuditCategory
+    from app.services import audit_log_service, automation
+
+    candidates = screen(session, top_n=top_n)
+    picks = [c.symbol for c in candidates]
     if picks:
-        automation.configure(session, universe=",".join(picks))
+        state = automation.get_state(session)
+        new_universe = ",".join(picks)
+        if new_universe != (state.universe or ""):
+            audit_log_service.record(
+                session, AuditCategory.SYSTEM, "discovery_picks",
+                message=f"Universe rotated to [{new_universe}] "
+                f"(sources: {settings.discovery_sources or 'static pool'}).",
+                payload={"picks": [
+                    {"symbol": c.symbol, "score": c.score, "momentum": c.momentum}
+                    for c in candidates
+                ]},
+            )
+        automation.configure(session, universe=new_universe)
     return picks
