@@ -25,7 +25,17 @@ def test_registry_has_all_strategies():
 
 def test_get_strategy_falls_back_to_momentum():
     assert get_strategy("nope").name == "momentum"
-    assert get_strategy("quick_flip").name == "quick_flip"
+    assert get_strategy("donchian").name == "donchian"
+
+
+def test_quick_flip_retired_from_live():
+    # Still registered (backtestable) but never routable into live trading.
+    from app.strategies import LIVE_STRATEGIES, RETIRED_FROM_LIVE
+
+    assert "quick_flip" in STRATEGY_REGISTRY
+    assert "quick_flip" in RETIRED_FROM_LIVE
+    assert "quick_flip" not in LIVE_STRATEGIES
+    assert get_strategy("quick_flip").name == "momentum"  # falls back
 
 
 def test_every_strategy_scores_and_signals():

@@ -85,9 +85,9 @@ class SettingsUpdate(BaseModel):
 
 
 def _strategy_names() -> list[str]:
-    from app.strategies import STRATEGY_REGISTRY
+    from app.strategies import LIVE_STRATEGIES
 
-    return list(STRATEGY_REGISTRY)
+    return list(LIVE_STRATEGIES)  # retired strategies stay backtestable, not selectable
 
 
 def _mask(value: str | None) -> dict:
