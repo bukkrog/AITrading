@@ -120,6 +120,26 @@ def test_sector_cap_limits_concentration(monkeypatch):
         ["A1", "A2", "A3", "A4", "T1"]
 
 
+def test_correlation_cap_skips_clones(monkeypatch):
+    import numpy as np
+
+    from app.services import universe
+
+    monkeypatch.setattr(universe, "_sector", lambda s: None)  # isolate corr cap
+    rng = np.random.default_rng(7)
+    base = rng.normal(0, 0.02, 60)
+    ranked = [
+        {"symbol": "A", "score": 99, "returns": list(base)},
+        {"symbol": "A2", "score": 98, "returns": list(base * 1.01)},          # clone of A
+        {"symbol": "B", "score": 97, "returns": list(rng.normal(0, 0.02, 60))},  # independent
+    ]
+    out = universe._apply_sector_cap(ranked, top_n=2, max_pct=0, max_corr=0.7)
+    assert [r["symbol"] for r in out] == ["A", "B"]  # clone A2 skipped
+    # Cap disabled -> plain top-N.
+    out2 = universe._apply_sector_cap(ranked, top_n=2, max_pct=0, max_corr=1.0)
+    assert [r["symbol"] for r in out2] == ["A", "A2"]
+
+
 def test_set_allocation(session):
     pf = PortfolioEngine(session)
     pf.set_allocation(50_000, reset_positions=True)

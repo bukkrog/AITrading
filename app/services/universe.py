@@ -264,9 +264,12 @@ def rank_by_momentum(symbols: list[str], top_n: int) -> list[dict]:
         mom_c = float(np.clip(roc / 10.0, -1, 1))
         trend_c = float(np.clip(trend_gap / 0.05, -1, 1))
         score = float(np.clip(50 + (0.6 * mom_c + 0.4 * trend_c) * 50, 0, 100))
+        rets = s.pct_change().dropna().tail(60)
         ranked.append(
             {"symbol": sym, "score": round(score, 1), "roc": round(roc, 1),
-             "trend_gap": round(trend_gap * 100, 1)}
+             "trend_gap": round(trend_gap * 100, 1),
+             # last 60 daily returns — used by the correlation cap at selection.
+             "returns": [round(float(x), 6) for x in rets],}
         )
     ranked.sort(key=lambda r: r["score"], reverse=True)
     return ranked[:top_n]
@@ -291,22 +294,43 @@ def _sector(symbol: str) -> str | None:
     return sec
 
 
-def _apply_sector_cap(ranked: list[dict], top_n: int, max_pct: float) -> list[dict]:
-    """Pick top-N best-first while capping names per sector (diversification)."""
-    if not (0 < max_pct < 1):
-        return ranked[:top_n]
+def _too_correlated(candidate: dict, selected: list[dict], max_corr: float) -> bool:
+    """True if candidate's 60d returns correlate > max_corr with any pick."""
+    if max_corr >= 1 or not selected:
+        return False
+    import numpy as np
+
+    c = candidate.get("returns") or []
+    if len(c) < 20:
+        return False  # not enough data to judge — don't block
+    for s in selected:
+        r = s.get("returns") or []
+        n = min(len(c), len(r))
+        if n < 20:
+            continue
+        corr = float(np.corrcoef(c[-n:], r[-n:])[0, 1])
+        if np.isfinite(corr) and corr > max_corr:
+            return True
+    return False
+
+
+def _apply_sector_cap(ranked: list[dict], top_n: int, max_pct: float,
+                      max_corr: float = 1.0) -> list[dict]:
+    """Pick top-N best-first under a sector cap AND a correlation cap."""
     import math
 
-    cap = max(1, math.ceil(top_n * max_pct))
+    cap = max(1, math.ceil(top_n * max_pct)) if 0 < max_pct < 1 else top_n
     out: list[dict] = []
     counts: dict[str, int] = {}
     for r in ranked:
         if len(out) >= top_n:
             break
-        sec = _sector(r["symbol"])
+        sec = _sector(r["symbol"]) if 0 < max_pct < 1 else None
+        if sec is not None and counts.get(sec, 0) >= cap:
+            continue  # sector full — skip to the next-best name
+        if _too_correlated(r, out, max_corr):
+            continue  # effectively the same bet as one we already hold
         if sec is not None:
-            if counts.get(sec, 0) >= cap:
-                continue  # sector full — skip to the next-best name
             counts[sec] = counts.get(sec, 0) + 1
         out.append(r)
     return out
@@ -349,7 +373,10 @@ def discover(
     # Re-check open status on the (cached) ranked list too, so a mid-cache
     # close is reflected without waiting for the next scan.
     ranked = [r for r in ranked_all if _is_open(r["symbol"])] if open_market_only else ranked_all
-    # Sector concentration cap (Phase 1 item 3): never let one sector dominate.
+    # Diversification caps: sector (P1.3) + pairwise correlation (P2.5).
     from app.config import settings
 
-    return _apply_sector_cap(ranked, top_n, settings.discovery_max_sector_pct)
+    return _apply_sector_cap(
+        ranked, top_n, settings.discovery_max_sector_pct,
+        max_corr=settings.discovery_max_correlation,
+    )

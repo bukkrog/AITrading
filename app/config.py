@@ -237,6 +237,10 @@ class Settings(BaseSettings):
     # Sector concentration cap: max fraction of the traded universe from one
     # sector (prevents e.g. an accidental all-biotech portfolio). 0 disables.
     discovery_max_sector_pct: float = 0.30
+    # Correlation cap: skip a candidate whose 60-day return correlation with an
+    # already-selected pick exceeds this (>=1 disables). Diversification is the
+    # only free lunch — 8 highly-correlated names are one big bet.
+    discovery_max_correlation: float = 0.70
     # Max tickers pulled into the pool before momentum ranking (keeps the bulk
     # download fast; momentum/attention sources are prioritised when capping).
     discovery_max_pool: int = 100
