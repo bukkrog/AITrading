@@ -239,7 +239,8 @@ def performance(session: Session = Depends(get_session)) -> dict:
         try:
             trades = _saxo_closed_trades()
         except Exception as exc:
-            return {"source": "saxo", "error": str(exc)[:200]}
+            return {"source": "saxo", "error": str(exc)[:200], "trades_today": 0,
+                    "realized": {"today": None, "week": None, "month": None}}
         res = _bucket(trades)
         st = cached_saxo_state() or {}
         res.update(source="saxo", currency=st.get("currency"), total_value=round(st.get("total_value") or 0.0, 2))

@@ -170,7 +170,7 @@ export function App() {
             )}
 
             {/* ---- Top box: today's activity + realised P&L by period ---- */}
-            {perf && (
+            {perf && perf.realized && (
               <div className="card" style={{ marginBottom: 12 }}>
                 <div className="grid metrics">
                   <Metric label="Trades today" value={String(perf.trades_today ?? 0)} />
