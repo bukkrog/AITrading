@@ -192,3 +192,9 @@ valideres gennem walk-forward-baren før den får lov at ranke live.
 nyheder hvert ~15. min KUN for åbne positioner; ved stærkt negative overskrifter
 → webhook-alert (gap-risiko-varsel før åbning). Genbruger news-feed +
 alert_webhook_url; kør i automation-loopet i stedet for ren pause.
+**EODHD-provider** (bruger-besluttet, FØR live): yfinance er uofficiel/skrabet
+og må ikke bære live-handel. Plan: EODHD "All World" (~$20/md) som primær
+kurskilde (EOD, alle børser inkl. København, splits/udbytte, 100k kald/dag) —
+ny market_data_source="eodhd". yfinance beholder discovery-screenere/news/
+earnings (advisory-funktioner). Saxo streaming beholder exits. Opgradér kun til
+ALL-IN-ONE (~$100/md) hvis screener/fundamentals også skal væk fra yfinance.
