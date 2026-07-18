@@ -35,6 +35,13 @@ logger = get_logger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
+    # Re-apply Setup-page changes persisted from earlier runs (wins over .env).
+    try:
+        from app.services.settings_store import apply_overrides
+
+        apply_overrides()
+    except Exception as exc:
+        logger.warning("Could not apply persisted settings: %s", exc)
     logger.info(
         "ai-trading-platform %s starting (env=%s, live_trading=%s)",
         __version__,

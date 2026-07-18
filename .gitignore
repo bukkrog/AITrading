@@ -5,6 +5,7 @@
 
 # ---- Local runtime state ----
 saxo_oauth.json
+settings_override.json
 trading.db
 *.db
 *.db-journal

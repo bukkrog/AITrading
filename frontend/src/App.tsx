@@ -52,6 +52,8 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [view, setView] = useState<View>("dashboard");
+  const [oauth, setOauth] = useState<{ configured: boolean; connected: boolean; environment: string } | null>(null);
+  const [activity, setActivity] = useState<{ current: { text: string; seconds_ago: number }; recent: { text: string; seconds_ago: number }[] } | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -81,6 +83,8 @@ export function App() {
       api.streamingStatus().then(setStreaming).catch(() => setStreaming(null));
       api.realized().then(setRealized).catch(() => setRealized(null));
       api.performance().then(setPerf).catch(() => setPerf(null));
+      api.saxoOauthStatus().then(setOauth).catch(() => setOauth(null));
+      api.activity().then(setActivity).catch(() => setActivity(null));
     } catch (e) {
       setError((e as Error).message);
     }
@@ -147,6 +151,17 @@ export function App() {
                 <span className={`badge ${config.live_trading_enabled ? "live" : "ok"}`}>
                   {config.live_trading_enabled ? "LIVE ENABLED" : "paper / sim"}
                 </span>
+                <span
+                  className={`badge ${oauth?.connected || brokerHealth?.connected ? "ok" : ""}`}
+                  style={oauth?.connected || brokerHealth?.connected ? {} : { background: "#5c2b2b", color: "#ffb4b4" }}
+                  title={oauth?.connected ? "OAuth-session — fornyes automatisk" : brokerHealth?.connected ? "Forbundet via token" : brokerHealth?.error ?? "Ikke forbundet"}
+                >
+                  {oauth?.connected
+                    ? `● Saxo ✓ (${oauth.environment}, auto)`
+                    : brokerHealth?.connected
+                      ? `● Saxo ✓ (${brokerHealth.environment ?? "sim"})`
+                      : "○ Saxo: ikke forbundet"}
+                </span>
                 <span className="badge">AI: {config.ai_auth_mode}</span>
               </>
             )}
@@ -166,6 +181,36 @@ export function App() {
             {portfolio.source === "saxo" && (
               <div className="badge ok" style={{ display: "inline-block", marginBottom: 10 }}>
                 ● Live Saxo account ({portfolio.currency ?? "SIM"}) — balances &amp; positions from Saxo
+              </div>
+            )}
+
+            {/* ---- Live activity: what the platform is doing right now ---- */}
+            {activity && (
+              <div className="card" style={{ marginBottom: 12, padding: "10px 14px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <span style={{
+                    width: 9, height: 9, borderRadius: "50%", flexShrink: 0,
+                    background: automation?.state.enabled ? "#3fb950" : "#8b949e",
+                    boxShadow: automation?.state.enabled ? "0 0 6px #3fb950" : "none",
+                  }} />
+                  <div>
+                    <span style={{ fontSize: 13 }}>
+                      <strong>Now:</strong> {automation?.state.enabled ? activity.current.text : "Auto Trading is stopped"}
+                    </span>
+                    <span className="muted" style={{ fontSize: 11, marginLeft: 8 }}>
+                      {activity.current.seconds_ago < 90
+                        ? `${Math.round(activity.current.seconds_ago)}s ago`
+                        : `${Math.round(activity.current.seconds_ago / 60)} min ago`}
+                    </span>
+                  </div>
+                </div>
+                {activity.recent.length > 0 && (
+                  <div className="muted" style={{ fontSize: 11, marginTop: 6, paddingLeft: 19 }}>
+                    {activity.recent.slice(0, 3).map((r, i) => (
+                      <div key={i}>· {r.text}</div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 

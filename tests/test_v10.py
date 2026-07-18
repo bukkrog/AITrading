@@ -306,6 +306,36 @@ def test_rejected_signal_persists_reason(monkeypatch):
         assert "Quant" in row.reject_reason and "101" in row.reject_reason
 
 
+def test_settings_persist_and_reapply(monkeypatch, tmp_path):
+    from app.config import settings
+    from app.services import settings_store
+
+    monkeypatch.setattr(settings_store, "_FILE", tmp_path / "settings_override.json")
+    settings_store.persist({"quant_score_threshold": 72.0, "risk_max_open_positions": 7,
+                            "saxo_access_token": "SECRET"})  # secret must NOT be written
+    import json
+    data = json.loads((tmp_path / "settings_override.json").read_text())
+    assert data["quant_score_threshold"] == 72.0
+    assert "saxo_access_token" not in data
+
+    monkeypatch.setattr(settings, "quant_score_threshold", 65.0)
+    monkeypatch.setattr(settings.risk, "max_open_positions", 10)
+    applied = settings_store.apply_overrides()
+    assert settings.quant_score_threshold == 72.0
+    assert settings.risk.max_open_positions == 7
+    assert set(applied) == {"quant_score_threshold", "risk_max_open_positions"}
+
+
+def test_activity_feed_ring_buffer():
+    from app.services import activity
+
+    activity.set_activity("Scanning sources…")
+    activity.set_activity("Evaluating 8 symbols")
+    snap = activity.snapshot()
+    assert snap["current"]["text"] == "Evaluating 8 symbols"
+    assert any("Scanning" in r["text"] for r in snap["recent"])
+
+
 def test_saxo_oauth_flow(monkeypatch, tmp_path):
     from app.config import settings
     from app.services import saxo_oauth

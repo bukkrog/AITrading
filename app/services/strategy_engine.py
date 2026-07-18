@@ -281,6 +281,9 @@ def run_cycle(
         symbols = []
 
     for sym in symbols:
+        from app.services.activity import set_activity
+
+        set_activity(f"Analyzing {sym} (quant + news + risk)…")
         df = get_bars_df(session, sym)
         if not len(df):
             logger.warning("No price data for %s; skipping.", sym)

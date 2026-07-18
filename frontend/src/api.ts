@@ -125,6 +125,10 @@ export const api = {
     ),
   cancelSaxoOrder: (orderId?: string) =>
     post<{ cancelled: string[] }>(`/control/saxo-cancel${orderId ? `?order_id=${orderId}` : ""}`),
+  activity: () =>
+    get<{ current: { text: string; seconds_ago: number }; recent: { text: string; seconds_ago: number }[] }>(
+      "/automation/activity",
+    ),
   saxoOauthStatus: () =>
     get<{ configured: boolean; connected: boolean; access_token_expires_in: number; environment: string }>(
       "/control/saxo/oauth-status",

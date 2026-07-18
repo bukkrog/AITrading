@@ -94,6 +94,14 @@ def monitoring_status(session: Session = Depends(get_session)) -> dict:
     return monitoring.status(session)
 
 
+@router.get("/activity")
+def current_activity() -> dict:
+    """What the platform is doing right now (dashboard live feed)."""
+    from app.services.activity import snapshot
+
+    return snapshot()
+
+
 @router.get("/regime")
 def market_regime() -> dict:
     """Current market regime (SPY/VIX) + the exposure policy applied."""

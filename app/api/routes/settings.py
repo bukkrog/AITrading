@@ -166,7 +166,7 @@ def _view() -> dict:
                 "omxc25", "dax", "cac", "europe",
             ],
         },
-        "persistence": "runtime-only (not written to disk; set permanent values in .env)",
+        "persistence": "saved changes persist across restarts (settings_override.json; tokens stay runtime-only)",
     }
 
 
@@ -178,6 +178,7 @@ def get_settings() -> dict:
 @router.post("")
 def update_settings(update: SettingsUpdate) -> dict:
     changed: list[str] = []
+    applied: dict = {}
     for key, value in update.model_dump(exclude_unset=True).items():
         if key.startswith("risk_"):
             # Risk limits live on the nested paper RiskConfig (settings.risk).
@@ -185,5 +186,10 @@ def update_settings(update: SettingsUpdate) -> dict:
         else:
             # For secrets, an empty string means "clear"; a value sets it.
             setattr(settings, key, value if value != "" else None)
+        applied[key] = value if value != "" else None
         changed.append(key if key not in _SECRETS else f"{key}(secret)")
+    if applied:
+        from app.services.settings_store import persist
+
+        persist(applied)
     return {"updated": changed, "settings": _view()}

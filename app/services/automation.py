@@ -103,10 +103,13 @@ def tick(session: Session) -> dict:
     # Let the screener pick the universe FIRST, so the market-hours gate below
     # reflects what we'll actually trade (e.g. don't pause on a stale US universe
     # when discovery would rotate us into open European names).
+    from app.services.activity import set_activity
+
     if settings.discovery_enabled:
         try:
             from app.services import discovery
 
+            set_activity("Discovery: scanning market sources for candidates…")
             discovery.apply_to_automation(session)
             state = get_state(session)  # universe just changed
         except Exception as exc:
@@ -131,6 +134,7 @@ def tick(session: Session) -> dict:
             _market_was_open = False
             state.last_run_at = datetime.now(timezone.utc)  # re-check next interval, not every 5s
             session.flush()
+            set_activity("Paused — traded exchanges are closed")
             return {"ran": False, "reason": "market_closed", "market": market}
         if _market_was_open is False:  # closed -> open transition
             audit_log_service.record(
@@ -141,6 +145,7 @@ def tick(session: Session) -> dict:
 
     try:
         universe = _universe(state)
+        set_activity(f"Evaluating {len(universe)} symbols ({', '.join(universe[:5])}{'…' if len(universe) > 5 else ''})")
         results = strategy_engine.run_cycle(
             session,
             universe,
@@ -166,6 +171,11 @@ def tick(session: Session) -> dict:
         return {"ran": False, "reason": "error", "error": str(exc)}
 
     approved = [r.symbol for r in results if r.approved]
+    set_activity(
+        f"Cycle done: {len(results)} evaluated, {len(approved)} approved"
+        + (f" ({', '.join(approved)})" if approved else "")
+        + " — waiting for next tick"
+    )
     # Keep a running Saxo stream aligned with the (possibly rotated) universe +
     # any positions opened/closed this cycle. No-op unless streaming is running.
     try:

@@ -21,7 +21,7 @@ class RiskConfig(BaseSettings):
 
     model_config = SettingsConfigDict(env_prefix="RISK_", extra="ignore")
 
-    max_open_positions: int = 15
+    max_open_positions: int = 10
     # Fraction of total portfolio value allowed in a single position.
     max_position_pct: float = 0.15  # 15 % (spec: 10–20 %)
     # Max fraction of equity risked on a single trade (entry → stop distance).
@@ -146,7 +146,7 @@ class Settings(BaseSettings):
     active_strategy: str = "momentum"
 
     # Decision thresholds (0–100). A trade needs BOTH scores strictly above.
-    quant_score_threshold: float = 70.0
+    quant_score_threshold: float = 65.0
     news_score_threshold: float = 70.0
     # How news participates in the entry decision (quant audit P1.5):
     #   "gate"     -> news score AND bullish news direction are hard requirements
@@ -221,7 +221,7 @@ class Settings(BaseSettings):
     trade_cooldown_minutes: int = 0
     # Skip orders whose notional is below this (avoids tiny, commission-heavy
     # trades). 0 = no minimum.
-    min_trade_notional: float = 0.0
+    min_trade_notional: float = 5000.0
 
     # ---- Discovery / screener (v4) ----------------------------------
     discovery_enabled: bool = False  # auto-refresh the universe from the screen
