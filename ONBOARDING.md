@@ -90,20 +90,23 @@ npm run dev
 
 Åbn **http://localhost:5173** i browseren.
 
-## 6. Kobl Saxo SIM på
+## 6. Kobl Saxo SIM på (OAuth — anbefalet)
 
-1. Hent et 24-timers SIM-token: https://www.developer.saxo → log ind → **Get 24h token**.
-2. I platformen: **Setup → Broker & capital → Saxo access token** → indsæt → **Save**.
-3. **Test Saxo connection** — skal vise ✓ connected (sim).
-4. Skift broker til **saxo (sim)** (i Setup eller Monitoring-panelet).
-5. Auto Trading → **Start** (eller sidebar-knappen). Evt. **Start streaming** i Monitoring.
+1. På developer.saxo → **Application Management**: opret/brug en app (Grant Type:
+   Code) og registrér Redirect URL: `http://<server>:8000/control/saxo/callback`.
+2. Læg `SAXO_APP_KEY`, `SAXO_APP_SECRET`, `SAXO_REDIRECT_URI` i `.env` (genstart).
+3. I platformen: **Setup → Broker & Saxo → "Log ind hos Saxo"** → log ind én gang.
+   Sessionen fornyes herefter automatisk og overlever genstarter.
+4. **Test connection** — skal vise ✓ connected (sim). Broker = **saxo**, env = **sim**.
+5. Auto Trading → **Start**.
 
-> **Husk:** 24h-tokenet udløber dagligt og skal indsættes igen (eller lægges i `.env`).
+> Fallback uden OAuth: 24h-token fra developer.saxo (skal fornys dagligt) —
+> feltet ligger sammenfoldet under Setup → Broker & Saxo.
 
 ## 7. Verificér
 
 ```bash
-.venv\Scripts\python.exe -m pytest     # forventet: 65+ passed
+.venv\Scripts\python.exe -m pytest     # forventet: 85+ passed
 ```
 
 - Dashboard viser positioner + "Trades today"-boks
@@ -144,11 +147,10 @@ Giv derefter Claude denne kontekst som første besked (kopiér):
 - 65 hermetiske tests
 
 **Kendte ærlige begrænsninger:**
-- Ingen strategi har dokumenteret edge endnu (SIM viser tab — forventeligt)
-- yfinance-priser ~15 min forsinkede; quick-flip på 15m-barer er derfor de facto
-  urentabel → bør pensioneres (se audit)
-- Live-gatens backtest-Sharpe har selektions-bias (max-af-N) — skal erstattes
-- Lokal fills-log afstemmes ikke mod Saxo (reconciliation mangler)
+- Ingen strategi har dokumenteret edge endnu — walk-forward-baren (Phase 2.6)
+  er dommeren, og SIM-perioden med det nye system er kun lige begyndt
+- yfinance er en uofficiel/skrabet kilde → skal afløses af EODHD før live
+- Universe-survivorship i backtests indtil discovery_picks-PIT-loggen modnes
 
 **PHASE 1 GENNEMFØRT (17/7-2026, commits 81eed2a..e6a7c25, 70 tests):**
 1. ✅ Quick-flip pensioneret fra live-rotation (stadig backtestbar)
@@ -180,6 +182,30 @@ Giv derefter Claude denne kontekst som første besked (kopiér):
 3. ✅ Webhook-alerting: ALERT_WEBHOOK_URL → kritiske alerts pushes
    (Slack/Discord/Teams/ntfy)
 4. ✅ PEAD-faktor: nylig earnings-beat +5 / miss −8 på shortlisten
+
+**DRIFT & UX GENNEMFØRT (17-18/7-2026, commits 27c97f7..c68deb4, 85 tests):**
+1. ✅ **Server-deployment**: platformen kører 24/7 på Ubuntu 22.04 VM i Proxmox
+   (10.10.15.144:8000) som ÉN systemd-service — FastAPI serverer også web-UI'et.
+   Fuld opskrift i DEPLOY_UBUNTU.md. Saxo-konto nulstillet; frisk database.
+2. ✅ **Saxo OAuth** (authorization code flow, DEMO-app): ét browser-login afløser
+   det daglige 24h-token; auto-fornyelse ~2 min før udløb; refresh-token
+   persisteres (saxo_oauth.json) og genoptages efter genstart.
+3. ✅ **Settings-persistens**: alle Setup-ændringer gemmes (settings_override.json)
+   og genindlæses ved opstart — vinder over .env; tokens persisteres aldrig.
+4. ✅ **Setup-overhaul**: 5 faner, fixet input-bug (talfelter kunne ikke redigeres),
+   Saxo-forbindelses-badge i topbar på alle sider, ærligt news-mode-felt.
+5. ✅ **Synlige afvisningsårsager**: signals.reject_reason persisteres og vises
+   som Reason-kolonne i Latest signals (fx "Risk veto: exposure budget=0").
+6. ✅ **Live activity-feed**: GET /automation/activity + "Now:"-strip på
+   Dashboard (fx "Analyzing UNH (quant + news + risk)…").
+7. ✅ **ARCHITECTURE.md**: mermaid-arkitekturdiagram + al matematikken
+   (faktor-score, sizing, regime/dd-skalering, exits, walk-forward).
+8. ✅ Defaults = anbefalinger: quant-gate 65, max 10 positioner, min notional
+   5000, Top N 8, pool 150, Daily barer, news advisory.
+
+**Anbefalet driftstilstand (nu):** broker=saxo, environment=sim, Live trading
+OFF, yfinance + news on, alle 12 kilder, enforce_loss_halts OFF (SIM) → lad den
+køre 2-4 uger uforstyrret og lad walk-forward + realiseret P&L dømme.
 
 **Bevidst udskudt (PHASE 4):** point-in-time-univers-backtests (venter på at
 discovery_picks-loggen modnes), portefølje-niveau vol-targeting (per-position

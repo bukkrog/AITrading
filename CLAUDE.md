@@ -4,6 +4,10 @@ Guidance for working in this repository.
 
 > **New machine?** Follow `ONBOARDING.md` — full setup recipe (venv, .env
 > template, tokens, run commands) + current status and the prioritized roadmap.
+> **Server deployment (Ubuntu/Proxmox):** `DEPLOY_UBUNTU.md`.
+> **Architecture diagram + the maths:** `ARCHITECTURE.md`.
+> Production instance runs 24/7 on the user's Proxmox VM (one systemd service,
+> port 8000, FastAPI serves the built frontend itself).
 
 ## What this is
 
