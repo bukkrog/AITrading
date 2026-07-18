@@ -188,3 +188,7 @@ inverse-ATR ER på plads), Postgres, filings/insider-AI-pipeline, execution-algo
 loggen (faktorer → realiseret forward-afkast) til at erstatte de håndsatte
 faktorvægte — kræver måneders data (100+ handler / 1000+ scorede kandidater);
 valideres gennem walk-forward-baren før den får lov at ranke live.
+**Overnight news watch** (bruger-bestilt): mens markederne er lukkede, tjek
+nyheder hvert ~15. min KUN for åbne positioner; ved stærkt negative overskrifter
+→ webhook-alert (gap-risiko-varsel før åbning). Genbruger news-feed +
+alert_webhook_url; kør i automation-loopet i stedet for ren pause.
