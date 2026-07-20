@@ -95,6 +95,10 @@ export const api = {
   acknowledgeAlerts: () => post<{ acknowledged: number }>("/alerts/acknowledge"),
   runChecks: () => post<{ raised: string[] }>("/alerts/check"),
   attribution: () => get<Attribution>("/portfolio/attribution"),
+  tradeLog: (limit = 80) =>
+    get<{ ts: string; symbol: string; side: string; quantity: number; price: number; value: number; commission: number; reason: string }[]>(
+      `/trades/log?limit=${limit}`,
+    ),
   compare: (symbol: string) =>
     get<{ symbol: string; bars: number; results: ComparisonRow[] }>(
       `/backtest/compare?symbol=${symbol}`,

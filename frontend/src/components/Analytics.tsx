@@ -3,15 +3,24 @@ import { api } from "../api";
 import type { Attribution, ComparisonRow } from "../types";
 
 const money = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 0 });
+type TradeRow = Awaited<ReturnType<typeof api.tradeLog>>[number];
+const clock = (iso: string) => new Date(iso).toLocaleString("da-DK", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" });
 
 export function Analytics({ universe }: { universe: string[] }) {
   const [attr, setAttr] = useState<Attribution | null>(null);
+  const [trades, setTrades] = useState<TradeRow[]>([]);
   const [symbol, setSymbol] = useState(universe[0] ?? "NOVO");
   const [rows, setRows] = useState<ComparisonRow[]>([]);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    api.attribution().then(setAttr).catch(() => setAttr(null));
+    const load = () => {
+      api.attribution().then(setAttr).catch(() => setAttr(null));
+      api.tradeLog().then(setTrades).catch(() => setTrades([]));
+    };
+    load();
+    const id = setInterval(load, 10000);  // keep Analytics live, like the dashboard
+    return () => clearInterval(id);
   }, []);
 
   const runCompare = async () => {
@@ -25,6 +34,33 @@ export function Analytics({ universe }: { universe: string[] }) {
   };
 
   return (
+    <>
+    <div className="card" style={{ marginBottom: 12 }}>
+      <h2>Trade log</h2>
+      <p className="muted" style={{ fontSize: 12, marginTop: -4 }}>
+        Every executed buy and sell, newest first — price, value and the reason. Auto-refreshes every 10s.
+      </p>
+      {trades.length > 0 ? (
+        <div style={{ overflowX: "auto", maxHeight: 420, overflowY: "auto" }}>
+          <table>
+            <thead><tr><th>Time</th><th>Symbol</th><th>Side</th><th>Qty</th><th>Price</th><th>Value</th><th>Reason</th></tr></thead>
+            <tbody>
+              {trades.map((t, i) => (
+                <tr key={i}>
+                  <td className="muted" style={{ fontSize: 12, whiteSpace: "nowrap" }}>{clock(t.ts)}</td>
+                  <td>{t.symbol}</td>
+                  <td><span className={`tag ${t.side === "BUY" ? "approved" : "rejected"}`}>{t.side}</span></td>
+                  <td>{t.quantity}</td>
+                  <td>{t.price.toFixed(2)}</td>
+                  <td>{money(t.value)}</td>
+                  <td style={{ fontSize: 12 }}>{t.reason}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : <p className="muted">No trades yet — they appear here as soon as the platform buys or sells.</p>}
+    </div>
     <div className="grid two-col">
       <div className="card">
         <h2>Performance attribution</h2>
@@ -86,5 +122,6 @@ export function Analytics({ universe }: { universe: string[] }) {
         )}
       </div>
     </div>
+    </>
   );
 }
