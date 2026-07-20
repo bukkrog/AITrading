@@ -224,3 +224,10 @@ kurskilde (EOD, alle børser inkl. København, splits/udbytte, 100k kald/dag) �
 ny market_data_source="eodhd". yfinance beholder discovery-screenere/news/
 earnings (advisory-funktioner). Saxo streaming beholder exits. Opgradér kun til
 ALL-IN-ONE (~$100/md) hvis screener/fundamentals også skal væk fra yfinance.
+**Regime-betinget strategivalg** (bruger-besluttet): lad regime-motoren (ikke
+backtest-Sharpe pr. aktie — det er overfitting) vælge strategi: fx momentum/
+Donchian i bull-trend, mean-reversion/RSI2 i chop, kun exits i crisis. Bygger
+videre på app/services/regime.py; konfigurerbart regime→strategi-map i Setup;
+afløser det faste active_strategy-valg med en "auto"-tilstand. Teoretisk grundet
+og stabilt, modsat per-aktie-valg (afvist: selektions-bias, regime-ustabilitet,
+kan ikke beregnes for friske discovery-navne).
