@@ -100,6 +100,22 @@ export const api = {
       `/backtest/compare?symbol=${symbol}`,
     ),
   getSettings: () => get<SettingsView>("/settings"),
+  sizingRecommendation: () =>
+    get<{
+      account_currency: string;
+      total_value_native: number;
+      total_value_dkk: number;
+      to_dkk_rate: number;
+      min_notional_dkk: number;
+      target_roundtrip_cost_pct: number;
+      recommended: {
+        min_trade_notional: number;
+        risk_max_open_positions: number;
+        risk_max_position_pct: number;
+        risk_max_risk_per_trade_pct: number;
+      };
+      rationale: string[];
+    }>("/settings/sizing-recommendation"),
   updateSettings: (body: Record<string, unknown>) =>
     postJson<{ updated: string[]; settings: SettingsView }>("/settings", body),
   discovery: (topN?: number) =>

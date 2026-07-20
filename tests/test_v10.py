@@ -306,6 +306,33 @@ def test_rejected_signal_persists_reason(monkeypatch):
         assert "Quant" in row.reject_reason and "101" in row.reject_reason
 
 
+def test_sizing_advisor_scales_with_capital():
+    from app.services.sizing_advisor import recommend
+
+    kw = dict(fixed_commission=3.0, commission_pct=0.0008, slippage_bps=5.0)
+
+    # Large EUR account -> full 10 positions, tight risk, converts to DKK.
+    big = recommend(100_000, "EUR", **kw)
+    assert big["recommended"]["risk_max_open_positions"] == 10
+    assert big["recommended"]["min_trade_notional"] >= 400
+    assert abs(big["total_value_dkk"] - 100_000 * 7.46) < 1  # EUR->DKK peg
+    assert big["recommended"]["risk_max_risk_per_trade_pct"] <= 0.01
+
+    # Tiny account -> few concentrated positions, higher risk %, warning.
+    small = recommend(1_000, "EUR", **kw)
+    assert small["recommended"]["risk_max_open_positions"] <= 3
+    assert small["recommended"]["risk_max_position_pct"] >= big["recommended"]["risk_max_position_pct"]
+    assert any("koncentrationsrisiko" in r for r in small["rationale"])
+
+    # DKK account: no conversion.
+    dk = recommend(500_000, "DKK", **kw)
+    assert dk["to_dkk_rate"] == 1.0 and dk["total_value_dkk"] == 500_000
+
+    # Bigger account recommends >= as many positions as a smaller one (monotone).
+    assert (recommend(50_000, "EUR", **kw)["recommended"]["risk_max_open_positions"]
+            >= recommend(5_000, "EUR", **kw)["recommended"]["risk_max_open_positions"])
+
+
 def test_exchange_and_region_from_symbol():
     from app.services.market_hours import exchange_label, region_for_symbol
 

@@ -177,6 +177,40 @@ def get_settings() -> dict:
     return _view()
 
 
+@router.get("/sizing-recommendation")
+def sizing_recommendation() -> dict:
+    """Recommend position-sizing settings from the LIVE account value.
+
+    Reads the current total account value (Saxo when connected, else the paper
+    account) and the configured cost model, and returns auto-scaled settings.
+    Recomputed on every call, so it tracks the account as it grows.
+    """
+    from app.data.database import session_scope
+    from app.portfolio.engine import PortfolioEngine
+    from app.services import sizing_advisor
+
+    with session_scope() as session:
+        engine = PortfolioEngine(session)
+        try:
+            if engine.saxo_active:
+                snap = engine.saxo_snapshot()
+                total = float(snap.get("total_value") or 0.0)
+                currency = snap.get("currency") or settings.base_currency
+            else:
+                total = float(engine.account.cash)
+                currency = settings.base_currency
+        except Exception:
+            total = float(getattr(engine.account, "cash", 0.0))
+            currency = settings.base_currency
+
+    return sizing_advisor.recommend(
+        total, currency,
+        fixed_commission=settings.commission_per_trade,
+        commission_pct=settings.commission_pct,
+        slippage_bps=settings.slippage_bps,
+    )
+
+
 @router.post("")
 def update_settings(update: SettingsUpdate) -> dict:
     changed: list[str] = []

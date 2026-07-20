@@ -69,6 +69,7 @@ export function SettingsMenu({ onChanged, onToast }: { onChanged: () => void; on
   const [err, setErr] = useState<string | null>(null);
   const [saxoResult, setSaxoResult] = useState<string | null>(null);
   const [oauth, setOauth] = useState<{ configured: boolean; connected: boolean; environment: string } | null>(null);
+  const [sizing, setSizing] = useState<Awaited<ReturnType<typeof api.sizingRecommendation>> | null>(null);
   const [testSymbol, setTestSymbol] = useState("AAPL");
   const [selfTest, setSelfTest] = useState<{ ok: boolean; placed_order: boolean; steps: { name: string; ok: boolean; detail?: unknown; error?: string }[] } | null>(null);
 
@@ -127,6 +128,7 @@ export function SettingsMenu({ onChanged, onToast }: { onChanged: () => void; on
     const poll = () => {
       api.discoveryStatus().then(setDiscStatus).catch(() => {});
       api.saxoOauthStatus().then(setOauth).catch(() => {});
+      api.sizingRecommendation().then(setSizing).catch(() => {});
     };
     poll();
     const id = setInterval(poll, 15000);
@@ -204,6 +206,25 @@ export function SettingsMenu({ onChanged, onToast }: { onChanged: () => void; on
       const r = await api.saxoSelfTest(testSymbol.trim().toUpperCase(), placeOrder, 1);
       setSelfTest(r);
     }, placeOrder ? "SIM test order sent" : "Self-test done");
+
+  const applySizing = () => guard(async () => {
+    if (!sizing) return;
+    const r = sizing.recommended;
+    setForm((f) => ({
+      ...f,
+      min_trade_notional: String(r.min_trade_notional),
+      risk_max_open_positions: String(r.risk_max_open_positions),
+      risk_max_position_pct: String(r.risk_max_position_pct * 100),
+      risk_max_risk_per_trade_pct: String(r.risk_max_risk_per_trade_pct * 100),
+    }));
+    await api.updateSettings({
+      min_trade_notional: r.min_trade_notional,
+      risk_max_open_positions: r.risk_max_open_positions,
+      risk_max_position_pct: r.risk_max_position_pct,
+      risk_max_risk_per_trade_pct: r.risk_max_risk_per_trade_pct,
+    });
+    await load();
+  }, "Anbefalede indstillinger anvendt ✓");
 
   const screen = () => guard(async () => { setPicks((await api.discovery(Number(form.discovery_top_n) || 8)).candidates); });
   const applyDisc = () => guard(async () => { const r = await api.applyDiscovery(Number(form.discovery_top_n) || 8); onToast(`Universe set: ${r.universe.join(", ")}`); await load(); });
@@ -453,6 +474,42 @@ export function SettingsMenu({ onChanged, onToast }: { onChanged: () => void; on
 
       {/* ================= RISK ================= */}
       {tab === "risk" && (
+        <>
+        {sizing && (
+          <div className="card" style={{ marginBottom: 16, padding: 14, border: "1px solid var(--border-accent)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+              <div>
+                <div style={{ fontWeight: 500 }}>📊 Anbefalede indstillinger ud fra din kapital</div>
+                <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>
+                  Konto: <strong>{Math.round(sizing.total_value_dkk).toLocaleString("da-DK")} DKK</strong>
+                  {sizing.account_currency !== "DKK" && ` (${Math.round(sizing.total_value_native).toLocaleString("da-DK")} ${sizing.account_currency} × ${sizing.to_dkk_rate})`}
+                  {" — opdateres automatisk når kontoen ændrer sig."}
+                </div>
+              </div>
+              <button disabled={busy} onClick={applySizing}>Anvend anbefalinger</button>
+            </div>
+            <table style={{ width: "100%", marginTop: 10, fontSize: 12 }}>
+              <thead><tr><th style={{ textAlign: "left" }}>Indstilling</th><th>Anbefalet</th><th>Nu</th></tr></thead>
+              <tbody>
+                <tr><td style={{ textAlign: "left" }}>Min. handel</td>
+                  <td>{sizing.recommended.min_trade_notional} {sizing.account_currency} (~{Math.round(sizing.min_notional_dkk).toLocaleString("da-DK")} DKK)</td>
+                  <td className="muted">{String(form.min_trade_notional ?? "")}</td></tr>
+                <tr><td style={{ textAlign: "left" }}>Max positioner</td>
+                  <td>{sizing.recommended.risk_max_open_positions}</td>
+                  <td className="muted">{String(form.risk_max_open_positions ?? "")}</td></tr>
+                <tr><td style={{ textAlign: "left" }}>Max pr. position %</td>
+                  <td>{(sizing.recommended.risk_max_position_pct * 100).toFixed(0)}%</td>
+                  <td className="muted">{String(form.risk_max_position_pct ?? "")}%</td></tr>
+                <tr><td style={{ textAlign: "left" }}>Risiko pr. handel %</td>
+                  <td>{(sizing.recommended.risk_max_risk_per_trade_pct * 100).toFixed(2)}%</td>
+                  <td className="muted">{String(form.risk_max_risk_per_trade_pct ?? "")}%</td></tr>
+              </tbody>
+            </table>
+            <ul className="muted" style={{ fontSize: 11, margin: "8px 0 0", paddingLeft: 18 }}>
+              {sizing.rationale.map((r, i) => <li key={i}>{r}</li>)}
+            </ul>
+          </div>
+        )}
         <div className="grid two-col">
           <div>
             <h3 style={{ fontSize: 13 }}>Position sizing</h3>
@@ -475,6 +532,7 @@ export function SettingsMenu({ onChanged, onToast }: { onChanged: () => void; on
             </div>
           </div>
         </div>
+        </>
       )}
 
       {/* ================= AI ================= */}
