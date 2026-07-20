@@ -10,12 +10,15 @@ export interface Position {
   pnl_pct?: number;
   stop_price?: number | null;
   stop_distance_pct?: number | null;
+  exchange?: string;
+  region?: string;
 }
 
 export interface Portfolio {
   cash: number;
   positions_value: number;
   total_value: number;
+  margin_available?: number;
   exposure_pct: number;
   drawdown_pct: number;
   kill_switch_engaged: boolean;
@@ -254,6 +257,7 @@ export interface SettingsView {
   discovery_sources: string;
   discovery_max_pool: number;
   discovery_open_market_only: boolean;
+  discovery_region_weights: string;
   automation_interval_seconds: number;
   automation_universe: string;
   options: Record<string, string[]>;

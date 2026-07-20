@@ -113,6 +113,7 @@ export function SettingsMenu({ onChanged, onToast }: { onChanged: () => void; on
         discovery_sources: v.discovery_sources,
         discovery_max_pool: v.discovery_max_pool,
         discovery_open_market_only: v.discovery_open_market_only,
+        discovery_region_weights: v.discovery_region_weights,
         automation_interval_seconds: v.automation_interval_seconds,
         automation_universe: v.automation_universe,
       };
@@ -371,6 +372,10 @@ export function SettingsMenu({ onChanged, onToast }: { onChanged: () => void; on
               <Field label="Top N">{num("discovery_top_n", 80)}</Field>
               <Field label="Max pool">{num("discovery_max_pool", 80)}</Field>
             </div>
+            <Field label="Region split (US/EU)" hint='Reserverer top-N-pladser pr. region. Fx "US:0.6,EU:0.4" = ca. 60 % USA, 40 % EU. Tom = ren global ranking. Løber en region tør, tager den anden resten.'>
+              <input type="text" value={String(form.discovery_region_weights ?? "")}
+                onChange={(e) => set("discovery_region_weights", e.target.value)} style={{ maxWidth: 160 }} />
+            </Field>
             <Field label="Static pool (only used when no source is ticked)">
               <textarea value={String(form.discovery_candidates)} onChange={(e) => set("discovery_candidates", e.target.value)}
                 rows={2} style={{ width: "100%", background: "var(--panel-2)", color: "var(--text)", border: "1px solid var(--border)", borderRadius: 8, padding: 8, fontSize: 12 }} />

@@ -17,19 +17,19 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
-# key -> display name, IANA timezone, (open_h, open_m), (close_h, close_m)
+# key -> display name, region (US/EU), IANA timezone, (open_h, open_m), (close_h, close_m)
 EXCHANGES: dict[str, dict] = {
-    "US": {"name": "US (NYSE/Nasdaq)", "tz": "America/New_York", "open": (9, 30), "close": (16, 0)},
-    "CO": {"name": "OMX Copenhagen", "tz": "Europe/Copenhagen", "open": (9, 0), "close": (17, 0)},
-    "DE": {"name": "Xetra (DE)", "tz": "Europe/Berlin", "open": (9, 0), "close": (17, 30)},
-    "LSE": {"name": "London (LSE)", "tz": "Europe/London", "open": (8, 0), "close": (16, 30)},
-    "PAR": {"name": "Euronext (Paris/Amsterdam/Brussels)", "tz": "Europe/Paris", "open": (9, 0), "close": (17, 30)},
-    "MIL": {"name": "Borsa Italiana (Milan)", "tz": "Europe/Rome", "open": (9, 0), "close": (17, 30)},
-    "MAD": {"name": "BME (Madrid)", "tz": "Europe/Madrid", "open": (9, 0), "close": (17, 30)},
-    "STO": {"name": "Nasdaq Stockholm", "tz": "Europe/Stockholm", "open": (9, 0), "close": (17, 30)},
-    "OSL": {"name": "Oslo Børs", "tz": "Europe/Oslo", "open": (9, 0), "close": (16, 20)},
-    "HEL": {"name": "Nasdaq Helsinki", "tz": "Europe/Helsinki", "open": (10, 0), "close": (18, 30)},
-    "SWX": {"name": "SIX Swiss", "tz": "Europe/Zurich", "open": (9, 0), "close": (17, 30)},
+    "US": {"name": "US (NYSE/Nasdaq)", "region": "US", "tz": "America/New_York", "open": (9, 30), "close": (16, 0)},
+    "CO": {"name": "OMX Copenhagen", "region": "EU", "tz": "Europe/Copenhagen", "open": (9, 0), "close": (17, 0)},
+    "DE": {"name": "Xetra (DE)", "region": "EU", "tz": "Europe/Berlin", "open": (9, 0), "close": (17, 30)},
+    "LSE": {"name": "London (LSE)", "region": "EU", "tz": "Europe/London", "open": (8, 0), "close": (16, 30)},
+    "PAR": {"name": "Euronext (Paris/Amsterdam/Brussels)", "region": "EU", "tz": "Europe/Paris", "open": (9, 0), "close": (17, 30)},
+    "MIL": {"name": "Borsa Italiana (Milan)", "region": "EU", "tz": "Europe/Rome", "open": (9, 0), "close": (17, 30)},
+    "MAD": {"name": "BME (Madrid)", "region": "EU", "tz": "Europe/Madrid", "open": (9, 0), "close": (17, 30)},
+    "STO": {"name": "Nasdaq Stockholm", "region": "EU", "tz": "Europe/Stockholm", "open": (9, 0), "close": (17, 30)},
+    "OSL": {"name": "Oslo Børs", "region": "EU", "tz": "Europe/Oslo", "open": (9, 0), "close": (16, 20)},
+    "HEL": {"name": "Nasdaq Helsinki", "region": "EU", "tz": "Europe/Helsinki", "open": (10, 0), "close": (18, 30)},
+    "SWX": {"name": "SIX Swiss", "region": "EU", "tz": "Europe/Zurich", "open": (9, 0), "close": (17, 30)},
 }
 
 # Yahoo-style suffix -> exchange key.
@@ -40,13 +40,37 @@ _SUFFIX = {
     ".SW": "SWX", ".VX": "SWX", ".Z": "SWX",
 }
 
+# Saxo MIC-style exchange codes (after the colon in "AAPL:xnas") -> exchange key.
+_MIC = {
+    "xnas": "US", "xnys": "US", "arcx": "US", "xase": "US", "bats": "US", "iexg": "US",
+    "xcse": "CO", "xetr": "DE", "xfra": "DE",
+    "xlon": "LSE", "xpar": "PAR", "xams": "PAR", "xbru": "PAR", "xlis": "PAR",
+    "xmil": "MIL", "xmad": "MAD", "xsto": "STO", "xosl": "OSL", "xhel": "HEL",
+    "xswx": "SWX", "xvtx": "SWX",
+}
+
 
 def exchange_for_symbol(symbol: str) -> str:
-    s = (symbol or "").upper()
+    s = (symbol or "").strip()
+    if ":" in s:  # Saxo MIC form, e.g. "AAPL:xnas"
+        mic = s.split(":", 1)[1].lower()
+        if mic in _MIC:
+            return _MIC[mic]
+    s = s.upper()
     for suffix, key in _SUFFIX.items():
         if s.endswith(suffix):
             return key
     return "US"  # plain tickers (the momentum universe) trade in the US
+
+
+def exchange_label(symbol: str) -> str:
+    """Human-readable exchange name for a symbol (Saxo MIC or Yahoo suffix)."""
+    return EXCHANGES.get(exchange_for_symbol(symbol), EXCHANGES["US"])["name"]
+
+
+def region_for_symbol(symbol: str) -> str:
+    """Coarse region bucket: 'US' or 'EU'."""
+    return EXCHANGES.get(exchange_for_symbol(symbol), EXCHANGES["US"]).get("region", "US")
 
 
 def _local_now(tz: str) -> datetime:

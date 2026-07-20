@@ -306,6 +306,42 @@ def test_rejected_signal_persists_reason(monkeypatch):
         assert "Quant" in row.reject_reason and "101" in row.reject_reason
 
 
+def test_exchange_and_region_from_symbol():
+    from app.services.market_hours import exchange_label, region_for_symbol
+
+    assert region_for_symbol("AAPL:xnas") == "US"
+    assert region_for_symbol("TRV:xnys") == "US"
+    assert region_for_symbol("ISS:xcse") == "EU"
+    assert region_for_symbol("MRCG:xetr") == "EU"
+    assert region_for_symbol("AM:xpar") == "EU"
+    assert region_for_symbol("NOVO-B.CO") == "EU"   # Yahoo suffix still works
+    assert region_for_symbol("AAPL") == "US"        # plain ticker -> US
+    assert "Copenhagen" in exchange_label("ISS:xcse")
+    assert "Nasdaq" in exchange_label("AAPL:xnas")
+
+
+def test_region_quota_split():
+    from app.services.universe import _apply_sector_cap
+
+    # 6 US names then 6 EU names, all uncorrelated, no sector data.
+    ranked = (
+        [{"symbol": f"US{i}:xnas", "score": 100 - i} for i in range(6)]
+        + [{"symbol": f"EU{i}:xcse", "score": 90 - i} for i in range(6)]
+    )
+    out = _apply_sector_cap(ranked, top_n=5, max_pct=0, max_corr=1.0,
+                            region_weights="US:0.6,EU:0.4")
+    from app.services.market_hours import region_for_symbol
+    regions = [region_for_symbol(r["symbol"]) for r in out]
+    assert len(out) == 5
+    assert regions.count("US") == 3 and regions.count("EU") == 2  # 60/40 of 5
+
+    # One region empty -> the other backfills to top_n (no short universe).
+    us_only = [{"symbol": f"US{i}:xnas", "score": 100 - i} for i in range(8)]
+    out2 = _apply_sector_cap(us_only, top_n=5, max_pct=0, max_corr=1.0,
+                             region_weights="US:0.6,EU:0.4")
+    assert len(out2) == 5
+
+
 def test_settings_persist_and_reapply(monkeypatch, tmp_path):
     from app.config import settings
     from app.services import settings_store

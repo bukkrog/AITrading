@@ -405,25 +405,72 @@ def _too_correlated(candidate: dict, selected: list[dict], max_corr: float) -> b
     return False
 
 
-def _apply_sector_cap(ranked: list[dict], top_n: int, max_pct: float,
-                      max_corr: float = 1.0) -> list[dict]:
-    """Pick top-N best-first under a sector cap AND a correlation cap."""
+def _parse_region_weights(spec: str) -> dict[str, float]:
+    """'US:0.6,EU:0.4' -> {'US': 0.6, 'EU': 0.4}. Empty/garbage -> {}."""
+    out: dict[str, float] = {}
+    for part in (spec or "").split(","):
+        if ":" not in part:
+            continue
+        k, _, v = part.partition(":")
+        try:
+            w = float(v)
+        except ValueError:
+            continue
+        if k.strip() and w > 0:
+            out[k.strip().upper()] = w
+    return out
+
+
+def _region_quota(top_n: int, weights: dict[str, float]) -> dict[str, int]:
+    """Turn target weights into integer slot quotas summing to ~top_n."""
+    total = sum(weights.values())
+    if total <= 0:
+        return {}
     import math
 
+    return {r: max(0, math.floor(top_n * w / total)) for r, w in weights.items()}
+
+
+def _apply_sector_cap(ranked: list[dict], top_n: int, max_pct: float,
+                      max_corr: float = 1.0, region_weights: str = "") -> list[dict]:
+    """Pick top-N best-first under sector, correlation AND region constraints.
+
+    Region quotas are a soft target: a first pass honours them; if the picks
+    fall short of top_n (a region ran dry), a second pass fills the rest from
+    the best remaining names, ignoring the region quota but still respecting
+    the sector and correlation caps.
+    """
+    import math
+
+    from app.services.market_hours import region_for_symbol
+
     cap = max(1, math.ceil(top_n * max_pct)) if 0 < max_pct < 1 else top_n
+    quota = _region_quota(top_n, _parse_region_weights(region_weights))
+
+    def _pick(enforce_region: bool) -> None:
+        for r in ranked:
+            if len(out) >= top_n or r in out:
+                continue
+            sec = _sector(r["symbol"]) if 0 < max_pct < 1 else None
+            if sec is not None and counts.get(sec, 0) >= cap:
+                continue  # sector full — skip to the next-best name
+            if enforce_region and quota:
+                reg = region_for_symbol(r["symbol"])
+                if reg_used.get(reg, 0) >= quota.get(reg, 0):
+                    continue  # this region's quota is full for now
+            if _too_correlated(r, out, max_corr):
+                continue  # effectively the same bet as one we already hold
+            if sec is not None:
+                counts[sec] = counts.get(sec, 0) + 1
+            reg_used[region_for_symbol(r["symbol"])] = reg_used.get(region_for_symbol(r["symbol"]), 0) + 1
+            out.append(r)
+
     out: list[dict] = []
     counts: dict[str, int] = {}
-    for r in ranked:
-        if len(out) >= top_n:
-            break
-        sec = _sector(r["symbol"]) if 0 < max_pct < 1 else None
-        if sec is not None and counts.get(sec, 0) >= cap:
-            continue  # sector full — skip to the next-best name
-        if _too_correlated(r, out, max_corr):
-            continue  # effectively the same bet as one we already hold
-        if sec is not None:
-            counts[sec] = counts.get(sec, 0) + 1
-        out.append(r)
+    reg_used: dict[str, int] = {}
+    _pick(enforce_region=True)   # honour region quotas first
+    if len(out) < top_n:
+        _pick(enforce_region=False)  # backfill best remaining names
     return out
 
 
@@ -472,4 +519,5 @@ def discover(
     return _apply_sector_cap(
         ranked, top_n, settings.discovery_max_sector_pct,
         max_corr=settings.discovery_max_correlation,
+        region_weights=settings.discovery_region_weights,
     )

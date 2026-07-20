@@ -11,6 +11,7 @@ from app.data.market_data import get_bars_df
 from app.data.models import Position, PortfolioSnapshot
 from app.portfolio import attribution as attribution_mod
 from app.portfolio.engine import PortfolioEngine
+from app.services.market_hours import exchange_label, region_for_symbol
 
 router = APIRouter(prefix="/portfolio", tags=["portfolio"])
 
@@ -65,11 +66,20 @@ def _saxo_portfolio(engine: PortfolioEngine) -> dict | None:
         return None
     cash = float(snap.get("cash") or 0.0)
     total = float(snap.get("total_value") or cash)
-    positions_value = round(total - cash, 2)
+    # Saxo SIM is a margin account: CashBalance is unaffected by stock buys, so
+    # "total - cash" is meaningless (often negative). Sum the real position
+    # market values instead; when the market is closed Saxo reports 0 there, so
+    # we fall back to what's tied up in margin (cash line minus what's still
+    # available to trade) as a best-effort exposure figure.
+    positions_value = round(sum(float(p.get("market_value") or 0.0) for p in snap["positions"]), 2)
+    margin_available = round(float(snap.get("margin_available") or 0.0), 2)
+    if positions_value <= 0 and margin_available > 0:
+        positions_value = round(max(0.0, cash - margin_available), 2)
     return {
         "cash": round(cash, 2),
         "positions_value": positions_value,
         "total_value": round(total, 2),
+        "margin_available": margin_available,
         "exposure_pct": round((positions_value / total * 100) if total else 0.0, 2),
         "drawdown_pct": round(engine.drawdown_pct({}) * 100, 2),
         "kill_switch_engaged": engine.kill_switch_engaged,
@@ -85,6 +95,8 @@ def _saxo_portfolio(engine: PortfolioEngine) -> dict | None:
                 "market_value": round(p["market_value"], 2),
                 "unrealized_pnl": round(p["unrealized_pnl"], 2),
                 "pnl_pct": p.get("pnl_pct"),
+                "exchange": exchange_label(p["symbol"]),
+                "region": region_for_symbol(p["symbol"]),
             })
             for p in snap["positions"]
         ],

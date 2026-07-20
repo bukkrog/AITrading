@@ -131,6 +131,7 @@ class PortfolioEngine:
         state = {
             "cash": float(bal.get("cash") or 0.0),
             "total_value": float(bal.get("total_value") or bal.get("cash") or 0.0),
+            "margin_available": float(bal.get("margin_available") or 0.0),
             "currency": bal.get("currency"),
             "positions": positions,
             "working_orders": working_orders,
@@ -146,12 +147,19 @@ class PortfolioEngine:
         _SAXO_CACHE["state"] = None
         _SAXO_CACHE["ts"] = 0.0
 
+    # Instance alias — several call sites (manual close, streaming sync) used
+    # engine.invalidate_saxo_cache(); without this method the AttributeError was
+    # silently swallowed and a sold position lingered in the UI until the TTL.
+    def invalidate_saxo_cache(self) -> None:
+        self.refresh_saxo()
+
     def saxo_snapshot(self) -> dict:
         """Balance + full normalized positions for the /portfolio view."""
         st = self._state()
         return {
             "cash": st["cash"],
             "total_value": st["total_value"],
+            "margin_available": st.get("margin_available", 0.0),
             "currency": st["currency"],
             "positions": st["positions"],
             "orders": st.get("orders", []),

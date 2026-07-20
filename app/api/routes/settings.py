@@ -84,6 +84,7 @@ class SettingsUpdate(BaseModel):
     discovery_sources: str | None = None
     discovery_max_pool: int | None = None
     discovery_open_market_only: bool | None = None
+    discovery_region_weights: str | None = None
     # Automation
     automation_interval_seconds: int | None = None
     automation_universe: str | None = None
@@ -151,6 +152,7 @@ def _view() -> dict:
         "discovery_sources": settings.discovery_sources,
         "discovery_max_pool": settings.discovery_max_pool,
         "discovery_open_market_only": settings.discovery_open_market_only,
+        "discovery_region_weights": settings.discovery_region_weights,
         "automation_interval_seconds": settings.automation_interval_seconds,
         "automation_universe": settings.automation_universe,
         "options": {

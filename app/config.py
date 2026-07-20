@@ -252,6 +252,11 @@ class Settings(BaseSettings):
     # already-selected pick exceeds this (>=1 disables). Diversification is the
     # only free lunch — 8 highly-correlated names are one big bet.
     discovery_max_correlation: float = 0.70
+    # Region target split for the traded universe, e.g. "US:0.6,EU:0.4" reserves
+    # ~60 % of the top-N slots for US names and ~40 % for EU. Best-first within
+    # each region; if one region can't fill its quota the other takes the rest.
+    # Empty = no regional steering (pure global ranking).
+    discovery_region_weights: str = "US:0.6,EU:0.4"
     # Max tickers pulled into the pool before momentum ranking (keeps the bulk
     # download fast; momentum/attention sources are prioritised when capping).
     discovery_max_pool: int = 100

@@ -233,6 +233,9 @@ export function App() {
             <div className="grid metrics">
               <Metric label={`Total value (${portfolio.currency ?? config?.base_currency ?? ""})`} value={fmt(portfolio.total_value)} />
               <Metric label="Cash" value={fmt(portfolio.cash)} />
+              {portfolio.margin_available != null && portfolio.margin_available > 0 && (
+                <Metric label="Available to trade" value={fmt(portfolio.margin_available)} />
+              )}
               <Metric label="Exposure" value={pct(portfolio.exposure_pct)} />
               <Metric label="Drawdown" value={pct(portfolio.drawdown_pct)} tone={portfolio.drawdown_pct > 0 ? "neg" : undefined} />
               <Metric label="Open positions" value={String(portfolio.positions.length)} />
@@ -245,12 +248,14 @@ export function App() {
               <h2>Positions</h2>
               {portfolio.positions.length > 0 ? (
                 <table>
-                  <thead><tr><th>Symbol</th><th>Qty</th><th>Avg</th><th>Last</th><th>Value</th><th>Unrealised P/L</th><th>P/L %</th><th>To stop-loss</th><th></th></tr></thead>
+                  <thead><tr><th>Symbol</th><th>Exchange</th><th>Qty</th><th>Avg</th><th>Last</th><th>Value</th><th>Unrealised P/L</th><th>P/L %</th><th>To stop-loss</th><th></th></tr></thead>
                   <tbody>
                     {portfolio.positions.map((p) => (
                       <Fragment key={p.symbol}>
                         <tr>
-                          <td>{p.symbol.split(":")[0]}</td><td>{p.quantity}</td><td>{p.avg_price.toFixed(2)}</td>
+                          <td>{p.symbol.split(":")[0]}</td>
+                          <td className="muted" style={{ fontSize: 12 }}>{p.exchange ?? "—"}</td>
+                          <td>{p.quantity}</td><td>{p.avg_price.toFixed(2)}</td>
                           <td>{p.last_price.toFixed(2)}</td><td>{fmt(p.market_value)}</td>
                           <td className={p.unrealized_pnl >= 0 ? "pos" : "neg"}>{p.unrealized_pnl.toFixed(2)}</td>
                           <td className={(p.pnl_pct ?? 0) >= 0 ? "pos" : "neg"}>{(p.pnl_pct ?? 0) >= 0 ? "+" : ""}{(p.pnl_pct ?? 0).toFixed(2)}%</td>
@@ -265,7 +270,7 @@ export function App() {
                           </td>
                         </tr>
                         <tr>
-                          <td colSpan={9} style={{ padding: "2px 8px 10px" }}>
+                          <td colSpan={10} style={{ padding: "2px 8px 10px" }}>
                             <PositionChart symbol={p.symbol} entry={p.avg_price} />
                           </td>
                         </tr>
