@@ -555,6 +555,9 @@ class SaxoBrokerAdapter(BrokerAdapter):
                     "unrealized_pnl": pnl,
                     "pnl_pct": pnl_pct,
                     "currency": df.get("Currency"),
+                    # Entry time — lets the trailing-stop measure the peak since
+                    # THIS position opened, not the instrument's all-time high.
+                    "opened_at": pb.get("ExecutionTimeOpen"),
                 }
             )
         return out

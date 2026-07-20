@@ -112,11 +112,29 @@ def _order_skip(session: Session, symbol: str, kind: str, exc: Exception) -> Non
 
 
 def _peak_since(df, since, floor: float) -> float:
-    """Highest high in ``df`` since ``since`` (position entry), never below floor."""
+    """Highest high in ``df`` since ``since`` (position entry), never below floor.
+
+    When the entry time is unknown we must NOT fall back to the full-history
+    high: doing so made a freshly (re)opened position trail off a peak from
+    weeks ago, so the trailing-stop fired instantly and — with a low cooldown —
+    the position was sold and rebought every tick (churn loop). Unknown entry
+    therefore returns the floor (entry/current), so trailing can't fire until a
+    real high forms after entry.
+    """
+    if since is None:
+        return floor
     try:
-        recent = df["high"][df.index >= since] if since is not None else df["high"]
+        import pandas as pd
+
+        ts = pd.to_datetime(since, utc=True)
+        idx = df.index
+        if getattr(idx, "tz", None) is not None:
+            ts = ts.tz_convert(idx.tz)
+        else:
+            ts = ts.tz_localize(None)
+        recent = df["high"][idx >= ts]
         peak = float(recent.max()) if len(recent) else floor
-    except Exception:  # tz/index mismatch — fall back to a safe floor
+    except Exception:  # tz/index/parse mismatch — fall back to a safe floor
         peak = floor
     return max(peak, floor)
 

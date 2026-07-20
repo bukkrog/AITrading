@@ -65,7 +65,10 @@ def test_exit_trailing_stop(monkeypatch):
     monkeypatch.setattr(settings, "take_profit_pct", 0.0)
     monkeypatch.setattr(settings, "trailing_stop_pct", 0.10)
     # peak high 130, current 110 -> down ~15% from peak >= 10% -> trailing fires.
-    reason = strategy_engine._exit_reason(_pos(100.0), _df([120, 130, 115], 110.0), price=110.0, quant_score=99)
+    # opened_at at the first bar so the peak is measured across the position's life
+    # (unknown/None entry deliberately no longer trails off full history — churn fix).
+    pos = SimpleNamespace(avg_price=100.0, opened_at="2024-01-01", symbol="X", quantity=10)
+    reason = strategy_engine._exit_reason(pos, _df([120, 130, 115], 110.0), price=110.0, quant_score=99)
     assert reason and "trailing-stop" in reason
 
 

@@ -58,6 +58,7 @@ class SaxoPosition:
     asset_type: str | None = None
     last_price: float = 0.0
     unrealized_pnl: float = 0.0
+    opened_at: str | None = None  # Saxo ExecutionTimeOpen (ISO) — for trailing peak
 
 
 def _ticker(symbol: str) -> str:
@@ -190,6 +191,7 @@ class PortfolioEngine:
                             asset_type="Stock",
                             last_price=float(p.get("last_price") or 0.0),
                             unrealized_pnl=float(p.get("unrealized_pnl") or 0.0),
+                            opened_at=p.get("opened_at"),
                         )
                     )
             # Count working stock orders as engaged slots (avoid exceeding max).

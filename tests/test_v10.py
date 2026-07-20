@@ -306,6 +306,27 @@ def test_rejected_signal_persists_reason(monkeypatch):
         assert "Quant" in row.reject_reason and "101" in row.reject_reason
 
 
+def test_trailing_peak_ignores_ancient_high_when_entry_unknown():
+    import pandas as pd
+
+    from app.services.strategy_engine import _peak_since
+
+    idx = pd.date_range("2026-01-01", periods=30, freq="D", tz="UTC")
+    highs = [20.0] * 10 + [18.0] * 20   # ancient high 20, recently ~18
+    df = pd.DataFrame({"high": highs}, index=idx)
+
+    # Unknown entry (Saxo position without opened_at) must NOT trail off the
+    # ancient 20 high — that caused the sell/rebuy churn loop.
+    assert _peak_since(df, None, floor=18.1) == 18.1
+
+    # Known recent entry -> peak from bars since entry only (~18, not 20).
+    since = pd.Timestamp("2026-01-20", tz="UTC")
+    assert _peak_since(df, since, floor=18.0) == 18.0
+    # Known old entry -> sees the ancient high (legitimate trailing).
+    old = pd.Timestamp("2026-01-01", tz="UTC")
+    assert _peak_since(df, old, floor=18.0) == 20.0
+
+
 def test_sizing_advisor_scales_with_capital():
     from app.services.sizing_advisor import recommend
 
