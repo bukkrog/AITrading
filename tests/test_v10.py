@@ -306,6 +306,32 @@ def test_rejected_signal_persists_reason(monkeypatch):
         assert "Quant" in row.reject_reason and "101" in row.reject_reason
 
 
+def test_saxo_state_survives_transient_broker_failure(monkeypatch):
+    from app.portfolio import engine as eng
+
+    eng.invalidate_saxo_cache()
+
+    class _Boom:
+        def balance(self): raise RuntimeError("429 rate limited")
+        def positions_normalized(self): return []
+        def open_orders_normalized(self): return []
+
+    pe = object.__new__(eng.PortfolioEngine)
+    pe._saxo = _Boom()
+    pe._state_cache = None
+    # No prior cache -> safe empty state, not a raised 500.
+    st = pe._state()
+    assert st["stale"] is True and st["positions"] == [] and st["total_value"] == 0.0
+
+    # With a last-good cache, a failure serves the cached snapshot.
+    eng._SAXO_CACHE["state"] = {"cash": 5.0, "total_value": 9.0, "margin_available": 4.0,
+                                "currency": "EUR", "positions": [], "working_orders": {}, "orders": []}
+    pe._state_cache = None
+    st2 = pe._state()
+    assert st2["total_value"] == 9.0
+    eng.invalidate_saxo_cache()
+
+
 def test_trailing_peak_ignores_ancient_high_when_entry_unknown():
     import pandas as pd
 

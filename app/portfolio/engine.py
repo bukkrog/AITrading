@@ -116,12 +116,28 @@ class PortfolioEngine:
             self._state_cache = _SAXO_CACHE["state"]
             return self._state_cache
 
-        bal = self._saxo.balance()
-        positions = [p for p in self._saxo.positions_normalized() if p.get("quantity")]
         try:
-            orders = self._saxo.open_orders_normalized()
-        except Exception:
-            orders = []
+            bal = self._saxo.balance()
+            positions = [p for p in self._saxo.positions_normalized() if p.get("quantity")]
+            try:
+                orders = self._saxo.open_orders_normalized()
+            except Exception:
+                orders = []
+        except Exception as exc:
+            # A transient Saxo failure (rate-limit / timeout, common right after
+            # a restart when many polls hit a cold cache) must not 500 every
+            # portfolio/monitoring endpoint. Reuse the last good snapshot if we
+            # have one; otherwise return a safe empty state WITHOUT caching it
+            # (so the very next call retries the broker).
+            logger.warning("Saxo state fetch failed (%s); serving last-good/empty.", exc)
+            if _SAXO_CACHE["state"] is not None:
+                self._state_cache = _SAXO_CACHE["state"]
+                return self._state_cache
+            return {
+                "cash": 0.0, "total_value": 0.0, "margin_available": 0.0,
+                "currency": None, "positions": [], "working_orders": {}, "orders": [],
+                "stale": True,
+            }
         pos_uics = {p.get("uic") for p in positions}
         working_orders: dict[int, float] = {}
         for o in orders:
