@@ -306,6 +306,30 @@ def test_rejected_signal_persists_reason(monkeypatch):
         assert "Quant" in row.reject_reason and "101" in row.reject_reason
 
 
+def test_choose_instrument_prefers_us_listing():
+    from app.execution.broker_adapter import SaxoBrokerAdapter
+
+    # "BAC" matches Bank of America (NYSE) AND an unrelated Toronto penny stock —
+    # both primary listings of their own instrument. Must pick the US one.
+    matches = [
+        {"Symbol": "BAC:xtse", "Identifier": 21693665, "PrimaryListing": 21693665},  # Toronto (wrong)
+        {"Symbol": "BAC:xnys", "Identifier": 211, "PrimaryListing": 211},            # NYSE (right)
+    ]
+    chosen = SaxoBrokerAdapter._choose_instrument("BAC", matches)
+    assert chosen["Symbol"] == "BAC:xnys"
+
+    # AGL: agilon (NYSE) vs AGL Energy (ASX) — pick NYSE.
+    matches2 = [
+        {"Symbol": "AGL:xasx", "Identifier": 1307243, "PrimaryListing": 1307243},
+        {"Symbol": "AGL:xnys", "Identifier": 9999, "PrimaryListing": 9999},
+    ]
+    assert SaxoBrokerAdapter._choose_instrument("AGL", matches2)["Symbol"] == "AGL:xnys"
+
+    # A fully-qualified TICKER:exchange still resolves exactly (European path).
+    m3 = [{"Symbol": "NOVO:xcse", "Identifier": 15, "PrimaryListing": 15}]
+    assert SaxoBrokerAdapter._choose_instrument("NOVO:xcse", m3)["Symbol"] == "NOVO:xcse"
+
+
 def test_saxo_state_survives_transient_broker_failure(monkeypatch):
     from app.portfolio import engine as eng
 

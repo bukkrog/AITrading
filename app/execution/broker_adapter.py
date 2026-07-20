@@ -162,9 +162,21 @@ class SaxoBrokerAdapter(BrokerAdapter):
         with ``Identifier == PrimaryListing`` is the one to trade.
         """
         want = symbol.upper()
+        # A plain ticker (no Yahoo suffix) comes from the US-focused screeners,
+        # so it means the US listing. Several unrelated companies can share a
+        # ticker across exchanges (e.g. "BAC" = Bank of America on NYSE AND a
+        # Toronto penny stock, both "primary" for their own instrument) — without
+        # a US-exchange preference the wrong one was picked, producing absurd
+        # share counts. Saxo's Symbol suffix carries the MIC.
+        US_MIC = {"xnas", "xnys", "arcx", "xase", "bats", "iexg", "xngs", "xnms", "xotc"}
 
         def ticker(m: dict) -> str:
             return str(m.get("Symbol", "")).split(":")[0].upper()
+
+        def us_listing(m: dict) -> bool:
+            sym = str(m.get("Symbol", ""))
+            mic = sym.split(":", 1)[1].lower() if ":" in sym else ""
+            return mic in US_MIC
 
         def is_primary(m: dict) -> bool:
             return m.get("Identifier") is not None and m.get("Identifier") == m.get("PrimaryListing")
@@ -176,8 +188,11 @@ class SaxoBrokerAdapter(BrokerAdapter):
                 return exact[0]
 
         for pred in (
+            lambda m: ticker(m) == want and us_listing(m) and is_primary(m),
+            lambda m: ticker(m) == want and us_listing(m),
             lambda m: ticker(m) == want and is_primary(m),
             lambda m: ticker(m) == want,
+            lambda m: ticker(m).startswith(want) and us_listing(m),
             lambda m: ticker(m).startswith(want) and is_primary(m),
             is_primary,
         ):
