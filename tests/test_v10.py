@@ -489,6 +489,41 @@ def test_stock_analyzer_compute():
     assert "error" in _compute("TEST", short)
 
 
+def test_risk_sizing_converts_budget_to_instrument_currency(monkeypatch):
+    from types import SimpleNamespace
+
+    from app.agents.risk_agent import RiskManagerAgent
+    from app.core.enums import OrderSide
+    from app.risk.engine import RiskEngine
+
+    # EUR account of 10000; a DKK stock at 600 DKK. Without FX, budget/price uses
+    # EUR numbers over a DKK price and grossly undersizes (often to 0). With FX,
+    # the 10000 EUR ≈ 74600 DKK is what gets divided by 600.
+    from app.core.enums import BrokerMode
+
+    class _PF:
+        account_currency = "EUR"
+        cash = 10000.0
+        kill_switch_engaged = False
+        saxo_active = True                 # exercise the FX path
+        broker_mode = BrokerMode.SAXO
+        def total_value(self, prices): return 10000.0
+        def positions_value(self, prices): return 0.0
+        def drawdown_pct(self, prices): return 0.0
+        def daily_loss_pct(self, prices): return 0.0
+        def roll_day_if_needed(self, prices): pass
+        def get_position(self, symbol): return None
+        def open_positions(self): return []
+    monkeypatch.setattr("app.config.settings.enforce_loss_halts", False, raising=False)
+
+    eng = RiskEngine(_PF())
+    agent = RiskManagerAgent(eng)
+    # NOVO-B.CO (Copenhagen → DKK), price 600 DKK, 15% max position.
+    r = agent.assess("NOVO-B.CO", OrderSide.BUY, 600.0, {"NOVO-B.CO": 600.0})
+    # 15% of 74600 DKK / 600 ≈ 18 shares — must be well above 0.
+    assert r.approved and r.approved_quantity >= 5
+
+
 def test_currency_convert_cross_rates():
     from app.services.currency import convert
 

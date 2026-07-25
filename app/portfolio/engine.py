@@ -189,6 +189,13 @@ class PortfolioEngine:
             return self._state()["cash"]
         return self.account.cash
 
+    @property
+    def account_currency(self) -> str:
+        """The account's base currency (Saxo balance currency, else config)."""
+        if self.saxo_active:
+            return (self._state().get("currency") or settings.base_currency)
+        return settings.base_currency
+
     # ---- Positions -----------------------------------------------------
     def positions(self) -> list[Position]:
         return list(self.session.scalars(select(Position)).all())

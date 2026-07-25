@@ -154,8 +154,46 @@ def get_portfolio(session: Session = Depends(get_session)) -> dict:
 @router.get("/attribution")
 def attribution(session: Session = Depends(get_session)) -> dict:
     """Realized + unrealized P&L attributed per symbol (FIFO)."""
-    # Value open lots at the latest close per symbol.
-    positions = PortfolioEngine(session).positions()
+    engine = PortfolioEngine(session)
+    # On Saxo the local Fill table is incomplete (broker-side stops / streaming
+    # exits leave no local fill), so the FIFO attribution is wrong. Build it from
+    # Saxo's own closed positions (realised) + open positions (unrealised) — the
+    # same source of truth as /realized, so the two panels agree.
+    if engine.broker_mode.value == "saxo":
+        try:
+            closed = _saxo_closed_trades()
+        except Exception as exc:
+            return {"source": "saxo", "error": str(exc)[:200], "per_symbol": [],
+                    "total_realized": 0.0, "total_unrealized": 0.0, "total_pnl": 0.0, "total_commission": 0.0}
+        agg: dict[str, dict] = {}
+        for t in closed:
+            r = agg.setdefault(t["symbol"], {"symbol": t["symbol"], "realized_pnl": 0.0,
+                                             "unrealized_pnl": 0.0, "commission": 0.0,
+                                             "closed_trades": 0, "wins": 0})
+            r["realized_pnl"] += t["realized_pnl"]
+            r["closed_trades"] += 1
+            if t["realized_pnl"] > 0:
+                r["wins"] += 1
+        for p in engine.open_positions():
+            sym = str(getattr(p, "symbol", p)).split(":")[0].upper()
+            r = agg.setdefault(sym, {"symbol": sym, "realized_pnl": 0.0, "unrealized_pnl": 0.0,
+                                     "commission": 0.0, "closed_trades": 0, "wins": 0})
+            r["unrealized_pnl"] += float(getattr(p, "unrealized_pnl", 0.0) or 0.0)
+        rows = []
+        for r in agg.values():
+            total = r["realized_pnl"] + r["unrealized_pnl"]
+            rows.append({"symbol": r["symbol"], "realized_pnl": round(r["realized_pnl"], 2),
+                         "unrealized_pnl": round(r["unrealized_pnl"], 2), "total_pnl": round(total, 2),
+                         "commission": 0.0, "closed_trades": r["closed_trades"],
+                         "win_rate": round(r["wins"] / r["closed_trades"] * 100, 1) if r["closed_trades"] else 0.0})
+        rows.sort(key=lambda x: x["total_pnl"], reverse=True)
+        return {"source": "saxo",
+                "total_realized": round(sum(r["realized_pnl"] for r in rows), 2),
+                "total_unrealized": round(sum(r["unrealized_pnl"] for r in rows), 2),
+                "total_pnl": round(sum(r["total_pnl"] for r in rows), 2),
+                "total_commission": 0.0, "per_symbol": rows}
+    # Paper: local FIFO attribution is correct.
+    positions = engine.positions()
     prices = _prices(session, [p.symbol for p in positions])
     a = attribution_mod.compute(session, prices)
     return {

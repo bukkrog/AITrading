@@ -61,7 +61,10 @@ def recommend(
     diversification = max(3, round(dkk / 50_000))
     positions = max(1, min(max_positions_cap, cost_bar, diversification))
 
-    max_position_pct = round(min(0.50, max(0.15, 1.3 * 0.95 / positions)), 3)
+    # Hard concentration guardrail: no single position over 35% of the account,
+    # even on a tiny account where few slots would otherwise imply 40%+. Keeps
+    # the "capital preservation first" ceiling that a small account erodes.
+    max_position_pct = round(min(0.35, max(0.15, 1.3 * 0.95 / positions)), 3)
     # 0.076 ≈ typical 8% ATR stop × 95% deployment; scales down with more slots.
     risk_pct = round(min(0.02, max(0.003, 0.076 / positions)), 4)
     # Traded universe (Top N) scales with the holdings: ~2× positions gives the
@@ -84,6 +87,15 @@ def recommend(
     if positions <= 2:
         rationale.append("⚠️ Få positioner = høj koncentrationsrisiko. Denne konto "
                          "er i underkanten for en spredt aktiestrategi.")
+    # Small accounts force higher risk/trade (to clear the cost floor) and more
+    # concentration — the OPPOSITE of a big account. Surface it, don't hide it.
+    if positions <= 4 and (risk_pct > 0.01 or max_position_pct > 0.20):
+        rationale.append(
+            f"⚠️ Lille konto → aggressiv sizing: {risk_pct*100:.1f}% risiko/handel "
+            f"(vs 0,5% standard) og op til {max_position_pct*100:.0f}% pr. position. "
+            f"Det er tvunget af kurtage-gulvet, ikke et frit valg — voksende konto "
+            f"skalerer automatisk mod mere konservative værdier."
+        )
 
     return {
         "account_currency": currency,

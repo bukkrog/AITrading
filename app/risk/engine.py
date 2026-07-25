@@ -89,7 +89,23 @@ class RiskEngine:
             return RiskAssessment(approved=False, risk_score=100.0, reasons=reasons)
 
         # ---- Position sizing ------------------------------------------
-        equity = self.portfolio.total_value(prices)
+        # FX: on a real (Saxo) account the budget (equity/cash/positions_value)
+        # is in the account currency (e.g. EUR) but reference_price is in the
+        # INSTRUMENT's currency (USD for a US stock, DKK for a Danish one), so we
+        # convert the budgets into the instrument currency — otherwise a EUR
+        # budget over a USD price mis-sizes and DKK names floor to 0 shares. In
+        # paper/synthetic mode there is one notional currency, so no conversion.
+        _instr = self.portfolio.account_currency
+        fx = 1.0
+        if getattr(self.portfolio, "saxo_active", False):
+            from app.services.currency import convert as _fx
+            from app.services.market_hours import currency_for_symbol
+
+            _instr = currency_for_symbol(symbol)
+            fx = _fx(1.0, self.portfolio.account_currency, _instr)
+        equity = self.portfolio.total_value(prices) * fx
+        cash = self.portfolio.cash * fx
+        positions_value = self.portfolio.positions_value(prices) * fx
         if stop_price is None:
             stop_price = rules.stop_price_from_pct(reference_price, cfg.default_stop_loss_pct)
         stop_distance = reference_price - stop_price
@@ -122,11 +138,9 @@ class RiskEngine:
             equity * cfg.max_position_pct * dd_scale, reference_price
         )
         # No leverage: cannot spend more cash than we hold.
-        qty_cash = rules.position_size_by_notional(self.portfolio.cash, reference_price)
+        qty_cash = rules.position_size_by_notional(cash, reference_price)
         # Total exposure budget remaining.
-        exposure_budget = equity * cfg.max_total_exposure_pct * dd_scale - (
-            self.portfolio.positions_value(prices)
-        )
+        exposure_budget = equity * cfg.max_total_exposure_pct * dd_scale - positions_value
         qty_exposure = rules.position_size_by_notional(max(0.0, exposure_budget), reference_price)
 
         binding = {
@@ -144,16 +158,15 @@ class RiskEngine:
         if qty <= 0:
             reasons.append(
                 f"Sizing yields 0 shares (binding constraint: {limiting}; "
-                f"cash={self.portfolio.cash:.0f}, exposure budget={max(0.0, exposure_budget):.0f})."
+                f"cash={cash:.0f}, exposure budget={max(0.0, exposure_budget):.0f} {_instr})."
             )
             return RiskAssessment(approved=False, risk_score=100.0, reasons=reasons)
 
         # ---- Risk score (0 safe → 100 risky) --------------------------
-        notional = qty * reference_price
+        notional = qty * reference_price  # instrument currency, like equity above
         pos_util = notional / (equity * cfg.max_position_pct) if equity else 1.0
         exp_util = (
-            (self.portfolio.positions_value(prices) + notional)
-            / (equity * cfg.max_total_exposure_pct)
+            (positions_value + notional) / (equity * cfg.max_total_exposure_pct)
             if equity
             else 1.0
         )

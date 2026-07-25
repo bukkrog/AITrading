@@ -73,6 +73,20 @@ def region_for_symbol(symbol: str) -> str:
     return EXCHANGES.get(exchange_for_symbol(symbol), EXCHANGES["US"]).get("region", "US")
 
 
+# Exchange key -> the currency instruments on it trade in.
+_EXCHANGE_CCY = {
+    "US": "USD", "CO": "DKK", "DE": "EUR", "PAR": "EUR", "MIL": "EUR", "MAD": "EUR",
+    "LSE": "GBP", "STO": "SEK", "OSL": "NOK", "HEL": "EUR", "SWX": "CHF",
+}
+
+
+def currency_for_symbol(symbol: str) -> str:
+    """Best-effort trading currency for a symbol from its exchange (US→USD,
+    :xcse→DKK, :xetr→EUR, …). Used to FX-convert sizing budgets, not for exact
+    accounting."""
+    return _EXCHANGE_CCY.get(exchange_for_symbol(symbol), "USD")
+
+
 def _local_now(tz: str) -> datetime:
     return datetime.now(ZoneInfo(tz))
 
