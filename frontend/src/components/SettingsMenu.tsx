@@ -220,12 +220,14 @@ export function SettingsMenu({ onChanged, onToast }: { onChanged: () => void; on
       risk_max_open_positions: String(r.risk_max_open_positions),
       risk_max_position_pct: String(r.risk_max_position_pct * 100),
       risk_max_risk_per_trade_pct: String(r.risk_max_risk_per_trade_pct * 100),
+      discovery_top_n: String(r.discovery_top_n),
     }));
     await api.updateSettings({
       min_trade_notional: r.min_trade_notional,
       risk_max_open_positions: r.risk_max_open_positions,
       risk_max_position_pct: r.risk_max_position_pct,
       risk_max_risk_per_trade_pct: r.risk_max_risk_per_trade_pct,
+      discovery_top_n: r.discovery_top_n,
     });
     await load();
   }, "Anbefalede indstillinger anvendt ✓");
@@ -513,6 +515,9 @@ export function SettingsMenu({ onChanged, onToast }: { onChanged: () => void; on
                 <tr><td style={{ textAlign: "left" }}>Max positioner</td>
                   <td>{sizing.recommended.risk_max_open_positions}</td>
                   <td className="muted">{String(form.risk_max_open_positions ?? "")}</td></tr>
+                <tr><td style={{ textAlign: "left" }}>Top N (univers)</td>
+                  <td>{sizing.recommended.discovery_top_n}</td>
+                  <td className="muted">{String(form.discovery_top_n ?? "")}</td></tr>
                 <tr><td style={{ textAlign: "left" }}>Max pr. position %</td>
                   <td>{(sizing.recommended.risk_max_position_pct * 100).toFixed(0)}%</td>
                   <td className="muted">{String(form.risk_max_position_pct ?? "")}%</td></tr>

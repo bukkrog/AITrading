@@ -563,6 +563,12 @@ def test_sizing_advisor_scales_with_capital():
     assert big2["recommended"]["risk_max_open_positions"] > 10
     assert recommend(2_000_000, "EUR", **kw)["recommended"]["risk_max_open_positions"] <= 20
 
+    # Top N scales WITH positions (≈2×, floor 5) so the universe grows with the
+    # account — a tiny account gets a small universe, a big one a larger one.
+    assert small["recommended"]["discovery_top_n"] == 5           # floor for tiny account
+    assert big["recommended"]["discovery_top_n"] > 5              # bigger account, bigger universe
+    assert big["recommended"]["discovery_top_n"] == min(40, big["recommended"]["risk_max_open_positions"] * 2)
+
 
 def test_exchange_and_region_from_symbol():
     from app.services.market_hours import exchange_label, region_for_symbol

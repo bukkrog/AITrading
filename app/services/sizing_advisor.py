@@ -67,6 +67,10 @@ def recommend(
     max_position_pct = round(min(0.50, max(0.15, 1.3 * 0.95 / positions)), 3)
     # 0.076 ≈ typical 8% ATR stop × 95% deployment; scales down with more slots.
     risk_pct = round(min(0.02, max(0.003, 0.076 / positions)), 4)
+    # Traded universe (Top N) scales with the holdings: ~2× positions gives the
+    # ranker a shortlist plus rotation buffer, without evaluating far more names
+    # than can ever be held. Floor 5, cap 40.
+    top_n = min(40, max(5, positions * 2))
 
     rationale = [
         f"Min. handel {min_notional:.0f} {currency} holder rundtur-omkostningen "
@@ -96,6 +100,7 @@ def recommend(
             "risk_max_open_positions": positions,
             "risk_max_position_pct": max_position_pct,
             "risk_max_risk_per_trade_pct": risk_pct,
+            "discovery_top_n": top_n,
         },
         "rationale": rationale,
     }
@@ -136,6 +141,9 @@ def apply_from_capital(session) -> dict | None:
     if settings.min_trade_notional != rec["min_trade_notional"]:
         changes.append(f"min_notional {settings.min_trade_notional:.0f}->{rec['min_trade_notional']:.0f}")
         settings.min_trade_notional = rec["min_trade_notional"]
+    if settings.discovery_top_n != rec["discovery_top_n"]:
+        changes.append(f"top_n {settings.discovery_top_n}->{rec['discovery_top_n']}")
+        settings.discovery_top_n = rec["discovery_top_n"]
     for attr, key in (("max_open_positions", "risk_max_open_positions"),
                       ("max_position_pct", "risk_max_position_pct"),
                       ("max_risk_per_trade_pct", "risk_max_risk_per_trade_pct")):

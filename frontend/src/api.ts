@@ -128,6 +128,7 @@ export const api = {
         risk_max_open_positions: number;
         risk_max_position_pct: number;
         risk_max_risk_per_trade_pct: number;
+        discovery_top_n: number;
       };
       rationale: string[];
     }>("/settings/sizing-recommendation"),
