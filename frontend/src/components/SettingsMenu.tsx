@@ -100,6 +100,7 @@ export function SettingsMenu({ onChanged, onToast }: { onChanged: () => void; on
         market_hours_enabled: v.market_hours_enabled,
         enforce_loss_halts: v.enforce_loss_halts,
         streaming_autostart: v.streaming_autostart,
+        auto_size_from_capital: v.auto_size_from_capital,
         market_data_source: v.market_data_source,
         news_enabled: v.news_enabled,
         market_lookback_days: v.market_lookback_days,
@@ -491,6 +492,12 @@ export function SettingsMenu({ onChanged, onToast }: { onChanged: () => void; on
                 </div>
               </div>
               <button disabled={busy} onClick={applySizing}>Anvend anbefalinger</button>
+            </div>
+            <div style={{ marginTop: 10, paddingTop: 8, borderTop: "1px solid var(--border)" }}>
+              <Field label="Auto-size fra kapital" hint="Når slået TIL: platformen anvender selv disse anbefalinger hvert cyklus og skalerer positioner/størrelser op og ned, når kontoen ændrer sig. Uafhængig af regime (de ganges sammen).">
+                <Toggle on={Boolean(form.auto_size_from_capital)} onChange={(v) => set("auto_size_from_capital", v)}
+                  onLabel="til — styres dynamisk af kapitalen" offLabel="fra — manuel styring" />
+              </Field>
             </div>
             <table style={{ width: "100%", marginTop: 10, fontSize: 12 }}>
               <thead><tr><th style={{ textAlign: "left" }}>Indstilling</th><th>Anbefalet</th><th>Nu</th></tr></thead>

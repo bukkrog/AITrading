@@ -100,6 +100,15 @@ def tick(session: Session) -> dict:
             )
             return {"ran": False, "reason": "live_gate_failed", "failed": failed}
 
+    # Auto-size from capital (opt-in): let account value drive the sizing settings.
+    if settings.auto_size_from_capital:
+        try:
+            from app.services import sizing_advisor
+
+            sizing_advisor.apply_from_capital(session)
+        except Exception as exc:  # never let sizing break the cycle
+            logger.warning("auto-size failed: %s", exc)
+
     # Let the screener pick the universe FIRST, so the market-hours gate below
     # reflects what we'll actually trade (e.g. don't pause on a stale US universe
     # when discovery would rotate us into open European names).

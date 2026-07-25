@@ -259,6 +259,7 @@ export interface SettingsView {
   discovery_open_market_only: boolean;
   discovery_region_weights: string;
   streaming_autostart: boolean;
+  auto_size_from_capital: boolean;
   automation_interval_seconds: number;
   automation_universe: string;
   options: Record<string, string[]>;

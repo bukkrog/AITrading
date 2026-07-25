@@ -183,6 +183,12 @@ class Settings(BaseSettings):
     # restart or a dropped WebSocket recovers on its own instead of needing a
     # manual "Start streaming". Set False to control streaming purely by hand.
     streaming_autostart: bool = True
+    # Auto-size from capital: when on, the platform reads the live account value
+    # each cycle and applies the sizing advisor's recommendation (min notional,
+    # position count, position %, risk %) automatically — so sizing scales with
+    # the account. Opt-in: off by default (risk params shouldn't change silently
+    # until you deliberately enable it).
+    auto_size_from_capital: bool = False
 
     # Market regime engine: classify SPY/VIX into bull/chop/bear/crisis and
     # scale new-position exposure accordingly (crisis blocks new entries).

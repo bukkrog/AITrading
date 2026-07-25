@@ -326,6 +326,26 @@ def test_manual_close_records_to_trade_log():
         assert hit is not None and "manual" in hit["reason"].lower()
 
 
+def test_auto_size_applies_to_settings(monkeypatch):
+    from app.config import settings
+    from app.services import sizing_advisor as sa
+
+    class _Eng:
+        saxo_active = False
+        class account:  # noqa: N801
+            cash = 200_000.0
+        def __init__(self, s): pass
+    monkeypatch.setattr("app.portfolio.engine.PortfolioEngine", _Eng)
+    monkeypatch.setattr(settings, "base_currency", "EUR")
+    monkeypatch.setattr(settings.risk, "max_open_positions", 3)
+
+    rec = sa.apply_from_capital(None)
+    assert rec is not None
+    # A 200k EUR (~1.5M DKK) account scales well past 3 positions.
+    assert settings.risk.max_open_positions > 3
+    assert settings.risk.max_open_positions == rec["risk_max_open_positions"]
+
+
 def test_streaming_ensure_restarts_when_disconnected(monkeypatch):
     from app.config import settings
     from app.core.enums import BrokerMode
@@ -464,9 +484,9 @@ def test_sizing_advisor_scales_with_capital():
 
     kw = dict(fixed_commission=3.0, commission_pct=0.0008, slippage_bps=5.0)
 
-    # Large EUR account -> full 10 positions, tight risk, converts to DKK.
-    big = recommend(100_000, "EUR", **kw)
-    assert big["recommended"]["risk_max_open_positions"] == 10
+    # Large EUR account -> many positions (scales with capital), tight risk, DKK.
+    big = recommend(100_000, "EUR", **kw)   # ~746k DKK -> ~15 positions
+    assert 12 <= big["recommended"]["risk_max_open_positions"] <= 20
     assert big["recommended"]["min_trade_notional"] >= 400
     assert abs(big["total_value_dkk"] - 100_000 * 7.46) < 1  # EUR->DKK peg
     assert big["recommended"]["risk_max_risk_per_trade_pct"] <= 0.01
@@ -484,6 +504,11 @@ def test_sizing_advisor_scales_with_capital():
     # Bigger account recommends >= as many positions as a smaller one (monotone).
     assert (recommend(50_000, "EUR", **kw)["recommended"]["risk_max_open_positions"]
             >= recommend(5_000, "EUR", **kw)["recommended"]["risk_max_open_positions"])
+
+    # Position count scales with capital past the old cap of 10 (up to 20).
+    big2 = recommend(200_000, "EUR", **kw)  # ~1.5M DKK
+    assert big2["recommended"]["risk_max_open_positions"] > 10
+    assert recommend(2_000_000, "EUR", **kw)["recommended"]["risk_max_open_positions"] <= 20
 
 
 def test_exchange_and_region_from_symbol():
