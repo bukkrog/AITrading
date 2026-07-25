@@ -306,6 +306,30 @@ def test_rejected_signal_persists_reason(monkeypatch):
         assert "Quant" in row.reject_reason and "101" in row.reject_reason
 
 
+def test_stock_analyzer_compute():
+    import pandas as pd
+
+    from app.services.stock_analyzer import _compute
+
+    idx = pd.date_range("2025-01-01", periods=260, freq="D", tz="UTC")
+    # Steady uptrend.
+    close = pd.Series(np.linspace(50, 100, 260), index=idx)
+    df = pd.DataFrame({"open": close, "high": close * 1.01, "low": close * 0.99,
+                       "close": close, "volume": 1e6}, index=idx)
+    r = _compute("TEST", df)
+    assert r["symbol"] == "TEST"
+    assert r["price"] == 100.0
+    assert r["from_high_pct"] == 0.0        # at the high
+    assert r["mom_12_1_pct"] > 0            # uptrend
+    assert 0 <= r["factor_score"] <= 100
+    assert len(r["signals"]) == 6           # all strategies reported
+    assert r["rsi14"] is not None
+
+    # Too little history -> graceful error, no crash.
+    short = df.iloc[:10]
+    assert "error" in _compute("TEST", short)
+
+
 def test_choose_instrument_prefers_us_listing():
     from app.execution.broker_adapter import SaxoBrokerAdapter
 

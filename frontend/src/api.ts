@@ -95,6 +95,17 @@ export const api = {
   acknowledgeAlerts: () => post<{ acknowledged: number }>("/alerts/acknowledge"),
   runChecks: () => post<{ raised: string[] }>("/alerts/check"),
   attribution: () => get<Attribution>("/portfolio/attribution"),
+  analyzeStock: (symbol: string) =>
+    get<{
+      symbol: string; error?: string;
+      price?: number; week52_high?: number; week52_low?: number;
+      from_high_pct?: number; from_low_pct?: number;
+      sma20?: number; sma20_pct?: number; sma50?: number; sma50_pct?: number; sma200?: number; sma200_pct?: number;
+      mom_12_1_pct?: number; ret_5d_pct?: number; ann_vol_pct?: number;
+      rsi14?: number; rsi2?: number; factor_score?: number; buy_gate?: number;
+      dollar_volume?: number; next_earnings?: string; long_count?: number;
+      signals?: { strategy: string; long: boolean; fresh: string }[];
+    }>(`/backtest/analyze?symbol=${encodeURIComponent(symbol)}`),
   tradeLog: (limit = 80) =>
     get<{ ts: string; symbol: string; side: string; quantity: number; price: number; value: number; commission: number; reason: string }[]>(
       `/trades/log?limit=${limit}`,

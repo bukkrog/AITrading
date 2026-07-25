@@ -17,6 +17,16 @@ def list_strategies() -> list[str]:
     return list(STRATEGY_REGISTRY)
 
 
+@router.get("/analyze")
+def analyze_stock(symbol: str) -> dict:
+    """On-demand technical + strategy analysis of any ticker (read-only)."""
+    from app.services import stock_analyzer
+
+    if not symbol or not symbol.strip():
+        raise HTTPException(status_code=400, detail="symbol required")
+    return stock_analyzer.analyze(symbol)
+
+
 @router.get("/walk-forward")
 def walk_forward_endpoint(
     symbol: str, strategy: str | None = None, session: Session = Depends(get_session)
