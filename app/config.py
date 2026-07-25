@@ -198,6 +198,11 @@ class Settings(BaseSettings):
     circuit_breaker_min_trades: int = 10     # need at least this many closed trades
     circuit_breaker_win_rate: float = 0.35   # trip when win rate falls below this…
     #                                          …AND net realised P&L is negative.
+    # Overnight news watch: while the market is closed, scan news for the stocks
+    # you hold and raise an alert (→ webhook) on strongly negative headlines, so
+    # a bad-news gap doesn't surprise you at the open. Alerts only — never trades.
+    overnight_news_watch: bool = True
+    overnight_news_score_floor: float = 30.0  # news score below this = warn (0-100, 50 neutral)
 
     # Market regime engine: classify SPY/VIX into bull/chop/bear/crisis and
     # scale new-position exposure accordingly (crisis blocks new entries).

@@ -154,8 +154,16 @@ def tick(session: Session) -> dict:
                 )
             _market_was_open = False
             state.last_run_at = datetime.now(timezone.utc)  # re-check next interval, not every 5s
+            # Overnight news watch: while closed, scan news for held positions and
+            # warn (webhook) on strongly negative headlines — gap-risk before open.
+            try:
+                from app.services import overnight_watch
+
+                overnight_watch.check(session)
+            except Exception as exc:  # never let it break the pause
+                logger.warning("overnight news watch failed: %s", exc)
             session.flush()
-            set_activity("Paused — traded exchanges are closed")
+            set_activity("Paused — market closed (watching news on holdings)")
             return {"ran": False, "reason": "market_closed", "market": market}
         if _market_was_open is False:  # closed -> open transition
             audit_log_service.record(

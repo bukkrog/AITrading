@@ -326,6 +326,43 @@ def test_manual_close_records_to_trade_log():
         assert hit is not None and "manual" in hit["reason"].lower()
 
 
+def test_overnight_watch_alerts_on_negative_news(session, monkeypatch):
+    from types import SimpleNamespace
+
+    from app.config import settings
+    from app.core.enums import SignalDirection
+    from app.schemas.trading import NewsScore
+    from app.services import overnight_watch
+
+    monkeypatch.setattr(settings, "overnight_news_watch", True)
+    monkeypatch.setattr(settings, "news_enabled", True)
+    monkeypatch.setattr(settings, "market_data_source", "yfinance")
+    overnight_watch._last_scan = 0.0
+    overnight_watch._alerted.clear()
+
+    held = [SimpleNamespace(symbol="ACME:xnas")]
+    monkeypatch.setattr("app.portfolio.engine.PortfolioEngine",
+                        lambda s: SimpleNamespace(open_positions=lambda: held))
+    monkeypatch.setattr("app.data.feeds.fetch_news", lambda sym, **k: ["ACME plunges on fraud probe"])
+
+    score = {"v": NewsScore(symbol="ACME", score=15.0, direction=SignalDirection.BEARISH, rationale="bad")}
+    monkeypatch.setattr("app.agents.news_agent.NewsAnalystAgent.analyze", lambda self, s, h: score["v"])
+
+    alerts = []
+    monkeypatch.setattr("app.services.alerts_service.raise_alert",
+                        lambda *a, **k: alerts.append(a[2]) or True)
+
+    out = overnight_watch.check(session)
+    assert out == ["ACME"] and len(alerts) == 1 and "ACME" in alerts[0]
+
+    # Positive news -> no alert; and same-day dedup blocks a repeat.
+    overnight_watch._last_scan = 0.0
+    assert overnight_watch.check(session) == []   # dedup (already alerted today)
+    overnight_watch._alerted.clear(); overnight_watch._last_scan = 0.0
+    score["v"] = NewsScore(symbol="ACME", score=80.0, direction=SignalDirection.BULLISH, rationale="good")
+    assert overnight_watch.check(session) == []   # good news, no alert
+
+
 def test_circuit_breaker_trip_logic():
     from app.services.circuit_breaker import should_trip
 

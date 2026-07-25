@@ -263,6 +263,7 @@ export interface SettingsView {
   circuit_breaker_enabled: boolean;
   circuit_breaker_win_rate: number;
   circuit_breaker_min_trades: number;
+  overnight_news_watch: boolean;
   automation_interval_seconds: number;
   automation_universe: string;
   options: Record<string, string[]>;

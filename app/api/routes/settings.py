@@ -69,6 +69,7 @@ class SettingsUpdate(BaseModel):
     circuit_breaker_enabled: bool | None = None
     circuit_breaker_win_rate: float | None = None
     circuit_breaker_min_trades: int | None = None
+    overnight_news_watch: bool | None = None
     discovery_min_price: float | None = None
     discovery_min_dollar_volume: float | None = None
     # Data & news
@@ -144,6 +145,7 @@ def _view() -> dict:
         "circuit_breaker_enabled": settings.circuit_breaker_enabled,
         "circuit_breaker_win_rate": settings.circuit_breaker_win_rate,
         "circuit_breaker_min_trades": settings.circuit_breaker_min_trades,
+        "overnight_news_watch": settings.overnight_news_watch,
         "alert_webhook_url": settings.alert_webhook_url or "",
         "discovery_min_price": settings.discovery_min_price,
         "discovery_min_dollar_volume": settings.discovery_min_dollar_volume,

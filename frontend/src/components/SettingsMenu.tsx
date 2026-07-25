@@ -102,6 +102,7 @@ export function SettingsMenu({ onChanged, onToast }: { onChanged: () => void; on
         streaming_autostart: v.streaming_autostart,
         auto_size_from_capital: v.auto_size_from_capital,
         circuit_breaker_enabled: v.circuit_breaker_enabled,
+        overnight_news_watch: v.overnight_news_watch,
         market_data_source: v.market_data_source,
         news_enabled: v.news_enabled,
         market_lookback_days: v.market_lookback_days,
@@ -363,6 +364,9 @@ export function SettingsMenu({ onChanged, onToast }: { onChanged: () => void; on
             <Field label="Use real news"><Toggle on={Boolean(form.news_enabled)} onChange={(v) => set("news_enabled", v)} /></Field>
             <Field label="Pause when market closed" hint="Auto Trading pauses while the traded exchanges are closed.">
               <Toggle on={Boolean(form.market_hours_enabled)} onChange={(v) => set("market_hours_enabled", v)} />
+            </Field>
+            <Field label="Overnight news watch" hint="While the market is closed, scan news on the stocks you hold and alert you (→ webhook) on strongly negative headlines — a gap-risk heads-up before the open. Alerts only, never trades.">
+              <Toggle on={Boolean(form.overnight_news_watch)} onChange={(v) => set("overnight_news_watch", v)} />
             </Field>
             <Field label="Tick interval (seconds)" hint="How often the automation loop runs. 30 is a good default.">
               {num("automation_interval_seconds")}
