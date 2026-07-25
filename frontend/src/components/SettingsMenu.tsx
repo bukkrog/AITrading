@@ -99,6 +99,7 @@ export function SettingsMenu({ onChanged, onToast }: { onChanged: () => void; on
         risk_max_total_drawdown_pct: v.risk_max_total_drawdown_pct * 100,
         market_hours_enabled: v.market_hours_enabled,
         enforce_loss_halts: v.enforce_loss_halts,
+        streaming_autostart: v.streaming_autostart,
         market_data_source: v.market_data_source,
         news_enabled: v.news_enabled,
         market_lookback_days: v.market_lookback_days,
@@ -363,6 +364,9 @@ export function SettingsMenu({ onChanged, onToast }: { onChanged: () => void; on
             </Field>
             <Field label="Tick interval (seconds)" hint="How often the automation loop runs. 30 is a good default.">
               {num("automation_interval_seconds")}
+            </Field>
+            <Field label="Auto-reconnect streaming" hint="Keep Saxo streaming (real-time exits) alive by itself — restarts on boot and reconnects if it drops. No more manual 'Start streaming'.">
+              <Toggle on={Boolean(form.streaming_autostart)} onChange={(v) => set("streaming_autostart", v)} />
             </Field>
           </div>
           <div>

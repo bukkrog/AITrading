@@ -181,6 +181,7 @@ def tick(session: Session) -> dict:
     try:
         from app.services import streaming_service
 
+        streaming_service.ensure(session)  # auto-(re)start if it should run but dropped
         streaming_service.sync(session)
     except Exception as exc:  # never let streaming break the cycle
         logger.warning("streaming sync failed: %s", exc)

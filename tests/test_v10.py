@@ -306,6 +306,44 @@ def test_rejected_signal_persists_reason(monkeypatch):
         assert "Quant" in row.reject_reason and "101" in row.reject_reason
 
 
+def test_streaming_ensure_restarts_when_disconnected(monkeypatch):
+    from app.config import settings
+    from app.core.enums import BrokerMode
+    from app.services import streaming_service as ss
+
+    monkeypatch.setattr(settings, "streaming_autostart", True)
+    monkeypatch.setattr(settings, "saxo_access_token", "tok")
+
+    class _PE:
+        broker_mode = BrokerMode.SAXO
+        def __init__(self, s): pass
+    monkeypatch.setattr("app.portfolio.engine.PortfolioEngine", _PE)
+
+    started = {"n": 0}
+    monkeypatch.setattr(ss, "start", lambda session: started.__setitem__("n", started["n"] + 1))
+
+    # No client -> should start.
+    monkeypatch.setattr(ss, "_client", None)
+    ss.ensure(None); assert started["n"] == 1
+
+    # Connected client -> no restart.
+    class _C:
+        def status(self): return {"connected": True}
+    monkeypatch.setattr(ss, "_client", _C())
+    ss.ensure(None); assert started["n"] == 1
+
+    # Dropped client -> restart.
+    class _D:
+        def status(self): return {"connected": False}
+    monkeypatch.setattr(ss, "_client", _D())
+    ss.ensure(None); assert started["n"] == 2
+
+    # Disabled -> never starts.
+    monkeypatch.setattr(settings, "streaming_autostart", False)
+    monkeypatch.setattr(ss, "_client", None)
+    ss.ensure(None); assert started["n"] == 2
+
+
 def test_stock_analyzer_compute():
     import pandas as pd
 

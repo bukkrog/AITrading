@@ -179,6 +179,10 @@ class Settings(BaseSettings):
     # Push CRITICAL alerts to this webhook URL (Slack/Discord/Teams/ntfy —
     # payload carries both "text" and "content"). Unset = UI/audit only.
     alert_webhook_url: str | None = None
+    # Auto-(re)start Saxo streaming whenever automation is running on Saxo — so a
+    # restart or a dropped WebSocket recovers on its own instead of needing a
+    # manual "Start streaming". Set False to control streaming purely by hand.
+    streaming_autostart: bool = True
 
     # Market regime engine: classify SPY/VIX into bull/chop/bear/crisis and
     # scale new-position exposure accordingly (crisis blocks new entries).

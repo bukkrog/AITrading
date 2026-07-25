@@ -199,6 +199,35 @@ def start(session: Session, symbols: list[str] | None = None) -> dict:
     return {"started": True, "symbols": [_uic_symbol[u] for u in uics], "uics": uics}
 
 
+def ensure(session: Session) -> None:
+    """Auto-(re)start streaming if it should be running but isn't/dropped.
+
+    Called each automation tick. Starts the stream when broker is Saxo, a token
+    is present and streaming_autostart is on — so a boot or a dropped WebSocket
+    recovers on its own. No-op when already connected, or when disabled.
+    """
+    if not settings.streaming_autostart or not settings.saxo_access_token:
+        return
+    from app.core.enums import BrokerMode
+    from app.portfolio.engine import PortfolioEngine
+
+    if PortfolioEngine(session).broker_mode is not BrokerMode.SAXO:
+        return
+    global _client
+    connected = False
+    if _client is not None:
+        try:
+            connected = bool(_client.status().get("connected"))
+        except Exception:
+            connected = False
+    if _client is None or not connected:
+        logger.info("streaming: auto-(re)starting (client=%s, connected=%s)", _client is not None, connected)
+        try:
+            start(session)
+        except Exception as exc:  # never let streaming break the tick
+            logger.warning("streaming auto-start failed: %s", exc)
+
+
 def sync(session: Session) -> dict:
     """Keep a RUNNING stream aligned with the universe + open positions.
 
