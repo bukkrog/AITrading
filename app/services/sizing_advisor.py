@@ -12,6 +12,10 @@ from __future__ import annotations
 
 import math
 
+from app.logging_config import get_logger
+
+logger = get_logger(__name__)
+
 # EUR base currency conversions to DKK. DKK↔EUR is pegged; others are rough
 # and only used for display, never for order math.
 _TO_DKK = {"DKK": 1.0, "EUR": 7.46, "USD": 6.9, "SEK": 0.65, "NOK": 0.64, "GBP": 8.7}
