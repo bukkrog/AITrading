@@ -224,6 +224,11 @@ kurskilde (EOD, alle børser inkl. København, splits/udbytte, 100k kald/dag) �
 ny market_data_source="eodhd". yfinance beholder discovery-screenere/news/
 earnings (advisory-funktioner). Saxo streaming beholder exits. Opgradér kun til
 ALL-IN-ONE (~$100/md) hvis screener/fundamentals også skal væk fra yfinance.
+**Strategi-circuit-breaker** (bruger-besluttet): luk hullet hvor drift.py KUN
+alarmerer ved model-degradering — byg en closed-loop der automatisk pauser
+(eller nedskalerer) en strategi/automation når degraderings-alarmen udløser
+(win-rate < tærskel / realiseret < 0 over N handler). Lille, sikkert,
+kapitalbeskyttende. Genbruger drift.check_degradation + automation.stop.
 **Regime-betinget strategivalg** (bruger-besluttet): lad regime-motoren (ikke
 backtest-Sharpe pr. aktie — det er overfitting) vælge strategi: fx momentum/
 Donchian i bull-trend, mean-reversion/RSI2 i chop, kun exits i crisis. Bygger
