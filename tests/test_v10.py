@@ -306,6 +306,26 @@ def test_rejected_signal_persists_reason(monkeypatch):
         assert "Quant" in row.reject_reason and "101" in row.reject_reason
 
 
+def test_manual_close_records_to_trade_log():
+    from app.api.routes.control import _record_manual_close
+    from app.data.database import session_scope
+    from app.data.models import Fill
+
+    with session_scope() as session:
+        _record_manual_close(session, "NVDA:xnas", 10.0, 123.45)
+        session.commit()
+        f = session.query(Fill).filter_by(symbol="NVDA").order_by(Fill.id.desc()).first()
+        assert f is not None and str(f.side).upper().endswith("SELL")
+        assert f.quantity == 10.0 and f.price == 123.45
+
+    # And it surfaces in the trade log with a manual-close reason.
+    from app.api.routes.trades import trade_log
+    with session_scope() as session:
+        rows = trade_log(limit=20, session=session)
+        hit = next((r for r in rows if r["symbol"] == "NVDA" and r["side"] == "SELL"), None)
+        assert hit is not None and "manual" in hit["reason"].lower()
+
+
 def test_streaming_ensure_restarts_when_disconnected(monkeypatch):
     from app.config import settings
     from app.core.enums import BrokerMode

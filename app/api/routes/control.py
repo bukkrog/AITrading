@@ -8,8 +8,10 @@ from app.config import settings
 from app.core.enums import BrokerMode
 from app.data.database import get_session
 from app.execution.broker_adapter import build_broker
+from app.logging_config import get_logger
 from app.portfolio.engine import PortfolioEngine
 
+logger = get_logger(__name__)
 router = APIRouter(prefix="/control", tags=["control"])
 
 
@@ -67,11 +69,38 @@ def set_kill_switch(engaged: bool, session: Session = Depends(get_session)) -> d
     return {"kill_switch_engaged": engine.kill_switch_engaged}
 
 
+def _record_manual_close(session: Session, symbol: str, quantity: float, price: float) -> None:
+    """Persist a manual Saxo sell as Order+Fill+audit so it appears in the trade log."""
+    from app.core.enums import (
+        AuditCategory, OrderSide, OrderStatus, OrderType, TradingMode,
+    )
+    from app.data.models import Fill, Order
+    from app.services import audit_log_service
+
+    base = str(symbol).split(":")[0].upper()
+    order = Order(
+        symbol=base, side=OrderSide.SELL, order_type=OrderType.MARKET,
+        quantity=quantity, status=OrderStatus.FILLED, mode=TradingMode.PAPER,
+    )
+    session.add(order)
+    session.flush()
+    session.add(Fill(order_id=order.id, symbol=base, side=OrderSide.SELL,
+                     quantity=quantity, price=price, commission=0.0, slippage=0.0))
+    # 'exit' entry supplies the reason the trade log shows for a sell.
+    audit_log_service.record(session, AuditCategory.ORDER, "exit", symbol=base,
+                             message=f"Sold {base}: manual close.")
+    audit_log_service.record(session, AuditCategory.FILL, "fill", symbol=base,
+                             message=f"Filled {quantity} @ {price:.4f} (manual)")
+
+
 @router.post("/close-position")
 def close_position(symbol: str, session: Session = Depends(get_session)) -> dict:
     """Manually market-close an open position (current broker)."""
     engine = PortfolioEngine(session)
     if engine.broker_mode is BrokerMode.SAXO:
+        # Capture the last price BEFORE closing, for the trade-log record.
+        pos = engine.get_position(symbol)
+        last_price = float(getattr(pos, "last_price", 0) or getattr(pos, "avg_price", 0) or 0)
         try:
             adapter = build_broker(BrokerMode.SAXO)
             result = adapter.close_position(symbol)
@@ -81,6 +110,13 @@ def close_position(symbol: str, session: Session = Depends(get_session)) -> dict
             engine.invalidate_saxo_cache()
         except Exception:
             pass
+        # Record the manual sell locally (Order+Fill+audit) so it shows in the
+        # trade log — the Saxo path otherwise leaves no local trace (realised
+        # P&L still comes from Saxo's closed positions).
+        try:
+            _record_manual_close(session, symbol, float(result.get("quantity") or 0), last_price)
+        except Exception as exc:  # logging must never fail the actual close
+            logger.warning("manual-close trade-log record failed: %s", exc)
         session.commit()
         return result
     # Paper broker: sell the whole position at the last stored price.
