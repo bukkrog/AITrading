@@ -21,6 +21,7 @@ export function AlertsPanel({ alerts, onChanged }: { alerts: Alert[]; onChanged:
         <h2 style={{ margin: 0 }}>Alerts</h2>
         <div className="btn-row">
           <button className="secondary" disabled={busy} onClick={() => act(api.runChecks)}>Run checks</button>
+          <button className="secondary" disabled={busy} onClick={() => act(api.testAlert)} title="Send a test CRITICAL alert to verify the Discord/webhook chain">Test webhook</button>
           <button className="secondary" disabled={busy || alerts.length === 0} onClick={() => act(api.acknowledgeAlerts)}>
             Acknowledge all
           </button>

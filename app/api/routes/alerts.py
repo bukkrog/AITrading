@@ -10,6 +10,21 @@ from app.services import alerts_service, monitoring
 router = APIRouter(prefix="/alerts", tags=["alerts"])
 
 
+@router.post("/test")
+def test_alert(session: Session = Depends(get_session)) -> dict:
+    """Raise a test CRITICAL alert to verify the webhook chain end-to-end."""
+    from app.config import settings
+    from app.core.enums import AlertSeverity
+
+    alerts_service.raise_alert(
+        session, "test",
+        "Test alert from the AI Trading platform — if you see this in Discord, the webhook works.",
+        severity=AlertSeverity.CRITICAL,
+    )
+    session.commit()
+    return {"sent": True, "webhook_configured": bool(settings.alert_webhook_url)}
+
+
 @router.get("")
 def list_alerts(
     only_active: bool = True, limit: int = 100, session: Session = Depends(get_session)

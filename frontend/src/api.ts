@@ -94,6 +94,7 @@ export const api = {
   alerts: (onlyActive = true) => get<Alert[]>(`/alerts?only_active=${onlyActive}&limit=40`),
   acknowledgeAlerts: () => post<{ acknowledged: number }>("/alerts/acknowledge"),
   runChecks: () => post<{ raised: string[] }>("/alerts/check"),
+  testAlert: () => post<{ sent: boolean; webhook_configured: boolean }>("/alerts/test"),
   attribution: () => get<Attribution>("/portfolio/attribution"),
   analyzeStock: (symbol: string) =>
     get<{
