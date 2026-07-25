@@ -50,7 +50,14 @@ def apply_overrides() -> list[str]:
         logger.warning("settings_override.json unreadable (%s) — ignored", exc)
         return []
     applied: list[str] = []
-    for key, value in data.items():
+    scrubbed = False
+    for key, value in list(data.items()):
+        # Never load a secret back from this file — secrets belong in .env only.
+        # If one leaked here from an older version, drop it (and rewrite below).
+        if key in _NEVER_PERSIST:
+            del data[key]
+            scrubbed = True
+            continue
         try:
             if key.startswith("risk_"):
                 setattr(settings.risk, key.removeprefix("risk_"), value)
@@ -59,6 +66,12 @@ def apply_overrides() -> list[str]:
             applied.append(key)
         except Exception as exc:  # a renamed/removed field must not block startup
             logger.warning("Override %r not applied: %s", key, exc)
+    if scrubbed:  # remove any leaked secret from the on-disk file
+        try:
+            _FILE.write_text(json.dumps(data, indent=1))
+            logger.warning("Scrubbed secret(s) from settings_override.json — set them in .env instead.")
+        except OSError:
+            pass
     if applied:
         logger.info("Applied %d persisted settings: %s", len(applied), ", ".join(sorted(applied)))
     return applied
