@@ -42,6 +42,18 @@ async def lifespan(app: FastAPI):
         apply_overrides()
     except Exception as exc:
         logger.warning("Could not apply persisted settings: %s", exc)
+    # Auto-size from capital: apply once now and start the always-on loop so the
+    # sizing tracks the account even while Auto Trading is stopped.
+    try:
+        from app.data.database import session_scope
+        from app.services import sizing_advisor
+
+        if settings.auto_size_from_capital:
+            with session_scope() as session:
+                sizing_advisor.apply_from_capital(session)
+        sizing_advisor.ensure_loop()
+    except Exception as exc:
+        logger.warning("Could not start auto-size: %s", exc)
     logger.info(
         "ai-trading-platform %s starting (env=%s, live_trading=%s)",
         __version__,

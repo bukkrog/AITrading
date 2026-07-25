@@ -11,11 +11,16 @@ central rate of 7.46038 (±2.25% band), so a constant is honest and stable.
 from __future__ import annotations
 
 import math
+import threading
+import time
 
 from app.logging_config import get_logger
 from app.services.currency import to_dkk  # shared DKK conversion
 
 logger = get_logger(__name__)
+
+_APPLY_INTERVAL = 60.0  # re-apply from live capital at most once a minute
+_loop_thread: threading.Thread | None = None
 
 
 def recommend(
@@ -146,3 +151,30 @@ def apply_from_capital(session) -> dict | None:
     if changes:
         logger.info("auto-size (%.0f %s): %s", total, currency, "; ".join(changes))
     return rec
+
+
+def _auto_size_loop() -> None:
+    """Apply auto-size from live capital every minute, ALWAYS — independent of
+    whether Auto Trading is running. So the sizing tracks the account (e.g.
+    monthly deposits) even while trading is stopped."""
+    from app.config import settings
+    from app.data.database import session_scope
+
+    while True:
+        time.sleep(_APPLY_INTERVAL)
+        if not settings.auto_size_from_capital:
+            continue
+        try:
+            with session_scope() as session:
+                apply_from_capital(session)
+        except Exception as exc:  # never let the loop die on a transient error
+            logger.warning("auto-size loop error: %s", exc)
+
+
+def ensure_loop() -> None:
+    """Start the always-on auto-size loop once (idempotent). Called at startup."""
+    global _loop_thread
+    if _loop_thread is None or not _loop_thread.is_alive():
+        _loop_thread = threading.Thread(target=_auto_size_loop, daemon=True, name="auto-size")
+        _loop_thread.start()
+        logger.info("auto-size background loop started")
