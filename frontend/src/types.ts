@@ -19,6 +19,11 @@ export interface Portfolio {
   positions_value: number;
   total_value: number;
   margin_available?: number;
+  dkk_rate?: number;
+  total_value_dkk?: number;
+  cash_dkk?: number;
+  margin_available_dkk?: number;
+  positions_value_dkk?: number;
   exposure_pct: number;
   drawdown_pct: number;
   kill_switch_engaged: boolean;
@@ -58,6 +63,8 @@ export interface Performance {
   currency?: string;
   trades_today: number;
   realized: { today: number | null; week: number | null; month: number | null };
+  realized_dkk?: { today: number | null; week: number | null; month: number | null };
+  dkk_rate?: number;
   total_value?: number;
   error?: string;
 }

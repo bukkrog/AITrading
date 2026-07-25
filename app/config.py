@@ -185,10 +185,10 @@ class Settings(BaseSettings):
     streaming_autostart: bool = True
     # Auto-size from capital: when on, the platform reads the live account value
     # each cycle and applies the sizing advisor's recommendation (min notional,
-    # position count, position %, risk %) automatically — so sizing scales with
-    # the account. Opt-in: off by default (risk params shouldn't change silently
-    # until you deliberately enable it).
-    auto_size_from_capital: bool = False
+    # position count, position %, risk %, universe size) automatically — so
+    # everything scales with the account as it grows (e.g. monthly deposits).
+    # Default ON so the scaling is always active; turn off for fully manual sizing.
+    auto_size_from_capital: bool = True
     # Strategy circuit breaker: when on, automation HALTS (stops opening new
     # positions) if realised performance degrades past the trip conditions —
     # a low win rate AND a net realised loss over a meaningful sample. It stays

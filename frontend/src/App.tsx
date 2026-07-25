@@ -219,10 +219,10 @@ export function App() {
               <div className="card" style={{ marginBottom: 12 }}>
                 <div className="grid metrics">
                   <Metric label="Trades today" value={String(perf.trades_today ?? 0)} />
-                  <Metric label={`Gain today${(perf.currency ?? portfolio.currency) ? " (" + (perf.currency ?? portfolio.currency) + ")" : ""}`}
-                    value={pnl(perf.realized.today)} tone={tone(perf.realized.today)} />
-                  <Metric label="Gain this week" value={pnl(perf.realized.week)} tone={tone(perf.realized.week)} />
-                  <Metric label="Gain this month" value={pnl(perf.realized.month)} tone={tone(perf.realized.month)} />
+                  <Metric label="Gain today (DKK)"
+                    value={pnl((perf.realized_dkk ?? perf.realized).today)} tone={tone(perf.realized.today)} />
+                  <Metric label="Gain this week (DKK)" value={pnl((perf.realized_dkk ?? perf.realized).week)} tone={tone(perf.realized.week)} />
+                  <Metric label="Gain this month (DKK)" value={pnl((perf.realized_dkk ?? perf.realized).month)} tone={tone(perf.realized.month)} />
                 </div>
                 <div className="muted" style={{ fontSize: 11, marginTop: 6 }}>
                   Realised P&amp;L from closed trades{perf.source === "saxo" ? " (Saxo)" : ""}. Open positions' unrealised P&amp;L is in the table below.
@@ -231,10 +231,10 @@ export function App() {
             )}
 
             <div className="grid metrics">
-              <Metric label={`Total value (${portfolio.currency ?? config?.base_currency ?? ""})`} value={fmt(portfolio.total_value)} />
-              <Metric label="Cash" value={fmt(portfolio.cash)} />
+              <Metric label="Total value (DKK)" value={fmt(portfolio.total_value_dkk ?? portfolio.total_value)} />
+              <Metric label="Cash (DKK)" value={fmt(portfolio.cash_dkk ?? portfolio.cash)} />
               {portfolio.margin_available != null && portfolio.margin_available > 0 && (
-                <Metric label="Available to trade" value={fmt(portfolio.margin_available)} />
+                <Metric label="Available to trade (DKK)" value={fmt(portfolio.margin_available_dkk ?? portfolio.margin_available)} />
               )}
               <Metric label="Exposure" value={pct(portfolio.exposure_pct)} />
               <Metric label="Drawdown" value={pct(portfolio.drawdown_pct)} tone={portfolio.drawdown_pct > 0 ? "neg" : undefined} />

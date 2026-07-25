@@ -75,11 +75,20 @@ def _saxo_portfolio(engine: PortfolioEngine) -> dict | None:
     margin_available = round(float(snap.get("margin_available") or 0.0), 2)
     if positions_value <= 0 and margin_available > 0:
         positions_value = round(max(0.0, cash - margin_available), 2)
+    from app.services.currency import rate_to_dkk
+
+    dkk = rate_to_dkk(snap.get("currency"))
     return {
         "cash": round(cash, 2),
         "positions_value": positions_value,
         "total_value": round(total, 2),
         "margin_available": margin_available,
+        # DKK equivalents for display (account base currency × the DKK peg).
+        "dkk_rate": dkk,
+        "total_value_dkk": round(total * dkk, 2),
+        "cash_dkk": round(cash * dkk, 2),
+        "margin_available_dkk": round(margin_available * dkk, 2),
+        "positions_value_dkk": round(positions_value * dkk, 2),
         "exposure_pct": round((positions_value / total * 100) if total else 0.0, 2),
         "drawdown_pct": round(engine.drawdown_pct({}) * 100, 2),
         "kill_switch_engaged": engine.kill_switch_engaged,
@@ -255,7 +264,14 @@ def performance(session: Session = Depends(get_session)) -> dict:
                     "realized": {"today": None, "week": None, "month": None}}
         res = _bucket(trades)
         st = cached_saxo_state() or {}
-        res.update(source="saxo", currency=st.get("currency"), total_value=round(st.get("total_value") or 0.0, 2))
+        from app.services.currency import rate_to_dkk
+
+        dkk = rate_to_dkk(st.get("currency"))
+        res.update(source="saxo", currency=st.get("currency"),
+                   total_value=round(st.get("total_value") or 0.0, 2),
+                   dkk_rate=dkk,
+                   realized_dkk={k: (round(v * dkk, 2) if v is not None else None)
+                                 for k, v in res["realized"].items()})
         return res
     # Paper: use fills for trade count + realized attribution (period split not tracked).
     from app.data.models import Fill
