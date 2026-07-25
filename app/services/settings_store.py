@@ -21,7 +21,8 @@ logger = get_logger(__name__)
 _FILE = Path(__file__).resolve().parent.parent.parent / "settings_override.json"
 
 #: Never write these to disk in plain text — they stay runtime-only.
-_NEVER_PERSIST = {"anthropic_auth_token", "anthropic_api_key", "saxo_access_token"}
+_NEVER_PERSIST = {"anthropic_auth_token", "anthropic_api_key", "saxo_access_token",
+                  "saxo_app_secret"}
 
 
 def persist(updates: dict) -> None:

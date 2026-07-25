@@ -71,13 +71,21 @@ def _saxo_portfolio(engine: PortfolioEngine) -> dict | None:
     # market values instead; when the market is closed Saxo reports 0 there, so
     # we fall back to what's tied up in margin (cash line minus what's still
     # available to trade) as a best-effort exposure figure.
-    positions_value = round(sum(float(p.get("market_value") or 0.0) for p in snap["positions"]), 2)
+    # Convert each holding's market value from ITS currency (a US stock's is
+    # USD) into the account base currency before summing — otherwise a USD 1000
+    # position was added as if it were EUR 1000, overstating exposure.
+    from app.services.currency import convert, rate_to_dkk
+
+    base = snap.get("currency")
+    positions_value = round(sum(
+        convert(float(p.get("market_value") or 0.0), p.get("currency"), base)
+        for p in snap["positions"]
+    ), 2)
     margin_available = round(float(snap.get("margin_available") or 0.0), 2)
     if positions_value <= 0 and margin_available > 0:
         positions_value = round(max(0.0, cash - margin_available), 2)
-    from app.services.currency import rate_to_dkk
 
-    dkk = rate_to_dkk(snap.get("currency"))
+    dkk = rate_to_dkk(base)
     return {
         "cash": round(cash, 2),
         "positions_value": positions_value,

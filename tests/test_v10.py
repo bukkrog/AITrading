@@ -326,9 +326,10 @@ def test_manual_close_records_to_trade_log():
         assert hit is not None and "manual" in hit["reason"].lower()
 
 
-def test_saxo_drawdown_rebaselines_after_account_resize():
+def test_saxo_drawdown_rebaselines_after_account_resize(monkeypatch):
     from types import SimpleNamespace
 
+    from app.portfolio import engine as eng
     from app.portfolio.engine import PortfolioEngine
 
     pe = object.__new__(PortfolioEngine)
@@ -337,16 +338,20 @@ def test_saxo_drawdown_rebaselines_after_account_resize():
     pe._saxo = object()  # saxo_active True
     pe._state_cache = {"total_value": 2000.0}
 
-    # Peak stuck at 100k (default) vs a reset 2k account would read ~98% —
-    # re-baseline makes it ~0%.
-    dd = pe.drawdown_pct({})
-    assert dd < 0.01
+    # Peak stuck at 100k (default) vs a reset 2k account would read ~98% — the
+    # once-per-process re-baseline makes it ~0%.
+    monkeypatch.setattr(eng, "_BASELINE_RECONCILED", False)
+    assert pe.drawdown_pct({}) < 0.01
     assert pe.account.peak_value == 2000.0
 
-    # A normal small loss still reports a real drawdown (no spurious reset).
+    # A genuine runtime drawdown is NOT erased (re-baseline already spent).
     pe.account.peak_value = 2000.0
-    pe._state_cache = {"total_value": 1900.0}
-    assert abs(pe.drawdown_pct({}) - 0.05) < 0.001   # 5% real drawdown preserved
+    pe._state_cache = {"total_value": 1200.0}
+    assert abs(pe.drawdown_pct({}) - 0.40) < 0.001   # 40% real drawdown preserved
+
+    # Transient Saxo failure (total 0) reads 0%, not a false 100%.
+    pe._state_cache = {"total_value": 0.0}
+    assert pe.drawdown_pct({}) == 0.0
 
 
 def test_overnight_watch_alerts_on_negative_news(session, monkeypatch):
@@ -482,6 +487,31 @@ def test_stock_analyzer_compute():
     # Too little history -> graceful error, no crash.
     short = df.iloc[:10]
     assert "error" in _compute("TEST", short)
+
+
+def test_currency_convert_cross_rates():
+    from app.services.currency import convert
+
+    # USD 1000 into EUR ≈ 925 (via DKK: 6.9/7.46). Display-only, approximate.
+    assert 900 < convert(1000, "USD", "EUR") < 950
+    # Same currency is a passthrough; unknown falls back to passthrough-ish.
+    assert convert(500, "EUR", "EUR") == 500
+
+
+def test_resolve_uic_rejects_fuzzy_only_match():
+    import pytest as _pytest
+
+    from app.core.exceptions import TradingPlatformError
+    from app.execution.broker_adapter import SaxoBrokerAdapter
+
+    adapter = object.__new__(SaxoBrokerAdapter)
+    adapter._uic_cache = {}
+    # Saxo fuzzy search returns unrelated names, none with ticker "FB".
+    adapter._get = lambda path, params=None: {
+        "Data": [{"AssetType": "Stock", "Symbol": "FBIO:xnas", "Identifier": 1, "PrimaryListing": 1}]
+    }
+    with _pytest.raises(TradingPlatformError):
+        adapter.resolve_uic("FB")
 
 
 def test_choose_instrument_prefers_us_listing():

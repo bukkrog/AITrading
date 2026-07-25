@@ -58,28 +58,27 @@ def check_feature_drift(session: Session) -> list[str]:
 
 
 def check_degradation(session: Session) -> list[str]:
-    """Flag deteriorating realized performance across closed trades."""
-    pf = PortfolioEngine(session)
-    prices = {}
-    for p in pf.open_positions():
-        df = get_bars_df(session, p.symbol)
-        if len(df):
-            prices[p.symbol] = float(df["close"].iloc[-1])
+    """Flag deteriorating realized performance across closed trades.
 
-    attr = attribution.compute(session, prices)
-    closed = sum(r.closed_trades for r in attr.per_symbol)
-    wins = sum(r.wins for r in attr.per_symbol)
+    On Saxo the local Fill table is incomplete (broker-side resting stops and
+    streaming exits close positions without writing a local fill), so we read
+    closed trades from Saxo's closed positions — the same source the circuit
+    breaker uses — instead of the local FIFO attribution, which undercounts.
+    """
+    from app.services.circuit_breaker import _closed_stats
+
+    closed, wins, total_realized = _closed_stats(session)
     if closed < MIN_CLOSED_TRADES:
         return []
 
     win_rate = wins / closed
     raised: list[str] = []
-    if win_rate < DEGRADED_WIN_RATE or attr.total_realized < 0:
+    if win_rate < DEGRADED_WIN_RATE or total_realized < 0:
         msg = (
             f"Model degradation: win rate {win_rate*100:.0f}% over {closed} closed "
-            f"trades, realized P&L {attr.total_realized:.0f}."
+            f"trades, realized P&L {total_realized:.0f}."
         )
-        severity = AlertSeverity.CRITICAL if attr.total_realized < 0 else AlertSeverity.WARNING
+        severity = AlertSeverity.CRITICAL if total_realized < 0 else AlertSeverity.WARNING
         if alerts_service.raise_alert(
             session,
             "degradation",
@@ -88,7 +87,7 @@ def check_degradation(session: Session) -> list[str]:
             payload={
                 "win_rate": round(win_rate, 3),
                 "closed_trades": closed,
-                "realized_pnl": round(attr.total_realized, 2),
+                "realized_pnl": round(total_realized, 2),
             },
         ):
             raised.append(msg)

@@ -234,6 +234,16 @@ class SaxoBrokerAdapter(BrokerAdapter):
             matches = [m for m in data.get("Data", []) if m.get("AssetType") == "Stock"]
             if not matches:
                 raise TradingPlatformError(f"Saxo: no Stock instrument found for '{symbol}'.")
+            # Reject rather than trade an arbitrary instrument: Saxo's keyword
+            # search is fuzzy, so a stale/renamed/misspelled ticker (e.g. "FB"
+            # after the META rename) can return unrelated names with NO exact
+            # ticker match. Without this guard _choose_instrument would fall
+            # through to matches[0] and place a live order on the wrong company.
+            want = symbol.split(":")[0].upper()
+            if not any(str(m.get("Symbol", "")).split(":")[0].upper() == want for m in matches):
+                raise TradingPlatformError(
+                    f"Saxo: no instrument with ticker '{want}' (fuzzy matches only) — refusing to trade."
+                )
             chosen = self._choose_instrument(symbol, matches)
         uic = int(chosen["Identifier"])
         self._uic_cache[symbol] = uic

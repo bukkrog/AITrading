@@ -19,3 +19,12 @@ def to_dkk(amount: float, currency: str | None) -> tuple[float, float]:
     """(amount_in_dkk, rate). Unknown currency → passthrough (rate 1.0)."""
     rate = rate_to_dkk(currency)
     return amount * rate, rate
+
+
+def convert(amount: float, from_ccy: str | None, to_ccy: str | None) -> float:
+    """Approx-convert between any two currencies via their DKK rates. Display /
+    aggregation only — never for order execution. Unknown currency → passthrough."""
+    to_rate = rate_to_dkk(to_ccy)
+    if to_rate == 0:
+        return amount
+    return amount * rate_to_dkk(from_ccy) / to_rate
