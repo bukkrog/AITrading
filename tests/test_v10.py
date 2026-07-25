@@ -326,6 +326,22 @@ def test_manual_close_records_to_trade_log():
         assert hit is not None and "manual" in hit["reason"].lower()
 
 
+def test_circuit_breaker_trip_logic():
+    from app.services.circuit_breaker import should_trip
+
+    kw = dict(min_trades=10, win_rate_floor=0.35)
+    # Not enough trades -> never trips.
+    assert should_trip(5, 1, -500, **kw) is None
+    # Low win rate AND net loss -> trips.
+    assert should_trip(20, 5, -800, **kw) is not None   # 25% win, losing
+    # Low win rate but PROFITABLE (big winners) -> does NOT trip.
+    assert should_trip(20, 5, 1200, **kw) is None
+    # Net loss but decent win rate -> does NOT trip (variance, not a bad strategy).
+    assert should_trip(20, 12, -100, **kw) is None      # 60% win
+    # Exactly at the floor is not below it.
+    assert should_trip(20, 7, -100, **kw) is None       # 35% win == floor
+
+
 def test_auto_size_applies_to_settings(monkeypatch):
     from app.config import settings
     from app.services import sizing_advisor as sa

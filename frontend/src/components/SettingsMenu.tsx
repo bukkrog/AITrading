@@ -101,6 +101,7 @@ export function SettingsMenu({ onChanged, onToast }: { onChanged: () => void; on
         enforce_loss_halts: v.enforce_loss_halts,
         streaming_autostart: v.streaming_autostart,
         auto_size_from_capital: v.auto_size_from_capital,
+        circuit_breaker_enabled: v.circuit_breaker_enabled,
         market_data_source: v.market_data_source,
         news_enabled: v.news_enabled,
         market_lookback_days: v.market_lookback_days,
@@ -536,6 +537,11 @@ export function SettingsMenu({ onChanged, onToast }: { onChanged: () => void; on
             <Field label="Enforce loss halts" hint="OFF while testing on SIM (keeps trading through drawdowns so you can observe). MUST be ON before live.">
               <Toggle on={Boolean(form.enforce_loss_halts)} onChange={(v) => set("enforce_loss_halts", v)}
                 onLabel="on (live-safe)" offLabel="off (SIM testing)" />
+            </Field>
+            <Field label="Strategy circuit breaker"
+              hint={`Halts automation if realised performance degrades — win rate below ${Math.round((s.circuit_breaker_win_rate ?? 0.35) * 100)}% AND a net loss over ${s.circuit_breaker_min_trades ?? 10}+ closed trades. Stays tripped until you restart Auto Trading manually. OFF during SIM data-gathering; consider ON before live.`}>
+              <Toggle on={Boolean(form.circuit_breaker_enabled)} onChange={(v) => set("circuit_breaker_enabled", v)}
+                onLabel="on (auto-halts bad strategy)" offLabel="off" />
             </Field>
             <div className="muted" style={{ fontSize: 11 }}>
               Kill switch & emergency stop always work regardless of these settings.

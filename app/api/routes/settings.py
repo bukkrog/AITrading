@@ -66,6 +66,9 @@ class SettingsUpdate(BaseModel):
     alert_webhook_url: str | None = None
     streaming_autostart: bool | None = None
     auto_size_from_capital: bool | None = None
+    circuit_breaker_enabled: bool | None = None
+    circuit_breaker_win_rate: float | None = None
+    circuit_breaker_min_trades: int | None = None
     discovery_min_price: float | None = None
     discovery_min_dollar_volume: float | None = None
     # Data & news
@@ -138,6 +141,9 @@ def _view() -> dict:
         "regime_enabled": settings.regime_enabled,
         "streaming_autostart": settings.streaming_autostart,
         "auto_size_from_capital": settings.auto_size_from_capital,
+        "circuit_breaker_enabled": settings.circuit_breaker_enabled,
+        "circuit_breaker_win_rate": settings.circuit_breaker_win_rate,
+        "circuit_breaker_min_trades": settings.circuit_breaker_min_trades,
         "alert_webhook_url": settings.alert_webhook_url or "",
         "discovery_min_price": settings.discovery_min_price,
         "discovery_min_dollar_volume": settings.discovery_min_dollar_volume,

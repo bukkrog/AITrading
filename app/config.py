@@ -189,6 +189,15 @@ class Settings(BaseSettings):
     # the account. Opt-in: off by default (risk params shouldn't change silently
     # until you deliberately enable it).
     auto_size_from_capital: bool = False
+    # Strategy circuit breaker: when on, automation HALTS (stops opening new
+    # positions) if realised performance degrades past the trip conditions —
+    # a low win rate AND a net realised loss over a meaningful sample. It stays
+    # tripped until you investigate and restart automation by hand. Opt-in (off
+    # by default, like the loss halts, so SIM data-gathering isn't interrupted).
+    circuit_breaker_enabled: bool = False
+    circuit_breaker_min_trades: int = 10     # need at least this many closed trades
+    circuit_breaker_win_rate: float = 0.35   # trip when win rate falls below this…
+    #                                          …AND net realised P&L is negative.
 
     # Market regime engine: classify SPY/VIX into bull/chop/bear/crisis and
     # scale new-position exposure accordingly (crisis blocks new entries).

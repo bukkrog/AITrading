@@ -85,6 +85,18 @@ def tick(session: Session) -> dict:
     if pf.kill_switch_engaged:
         return {"ran": False, "reason": "kill_switch_engaged"}
 
+    # Strategy circuit breaker: halt (stops this and future ticks) if realised
+    # performance has degraded past the trip. Runs before any new entries.
+    try:
+        from app.services import circuit_breaker
+
+        tripped = circuit_breaker.check(session)
+        if tripped:
+            session.flush()
+            return {"ran": False, "reason": "circuit_breaker_tripped", "detail": tripped}
+    except Exception as exc:  # never let it break the cycle
+        logger.warning("circuit breaker check failed: %s", exc)
+
     if state.live_mode:
         gate = live_gate.evaluate(session)
         if not gate["ready"]:

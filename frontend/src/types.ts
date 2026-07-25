@@ -260,6 +260,9 @@ export interface SettingsView {
   discovery_region_weights: string;
   streaming_autostart: boolean;
   auto_size_from_capital: boolean;
+  circuit_breaker_enabled: boolean;
+  circuit_breaker_win_rate: number;
+  circuit_breaker_min_trades: number;
   automation_interval_seconds: number;
   automation_universe: string;
   options: Record<string, string[]>;
