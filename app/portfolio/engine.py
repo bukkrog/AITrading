@@ -330,17 +330,42 @@ class PortfolioEngine:
             self.account.peak_value = tv
             self.session.flush()
 
+    def _reconcile_baseline_saxo(self, tv: float) -> None:
+        """Keep the drawdown / daily-loss reference in the LIVE Saxo account's
+        scale. An out-of-band account change (a SIM reset, a deposit or a
+        withdrawal) resizes the account, so a peak/day-start seeded from a
+        different size produces a bogus drawdown — e.g. a 100k default peak vs a
+        freshly-reset 2k account reads as ~98% drawdown. Re-baseline down to the
+        current total when the stored reference is far above it (>50%); a genuine
+        trading drawdown never gets near that (the 10% limit halts long before).
+        """
+        if not self.saxo_active or tv <= 0:
+            return
+        changed = False
+        if self.account.peak_value > tv * 1.5:
+            self.account.peak_value = tv
+            changed = True
+        if self.account.day_start_value > tv * 1.5:
+            self.account.day_start_value = tv
+            changed = True
+        if changed:
+            self.session.flush()
+
     def drawdown_pct(self, prices: dict[str, float]) -> float:
+        tv = self.total_value(prices)
+        self._reconcile_baseline_saxo(tv)
         peak = self.account.peak_value
         if peak <= 0:
             return 0.0
-        return max(0.0, (peak - self.total_value(prices)) / peak)
+        return max(0.0, (peak - tv) / peak)
 
     def daily_loss_pct(self, prices: dict[str, float]) -> float:
+        tv = self.total_value(prices)
+        self._reconcile_baseline_saxo(tv)
         start = self.account.day_start_value
         if start <= 0:
             return 0.0
-        return max(0.0, (start - self.total_value(prices)) / start)
+        return max(0.0, (start - tv) / start)
 
     # ---- Snapshot ------------------------------------------------------
     def snapshot(self, prices: dict[str, float]) -> PortfolioSnapshot:

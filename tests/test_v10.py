@@ -326,6 +326,29 @@ def test_manual_close_records_to_trade_log():
         assert hit is not None and "manual" in hit["reason"].lower()
 
 
+def test_saxo_drawdown_rebaselines_after_account_resize():
+    from types import SimpleNamespace
+
+    from app.portfolio.engine import PortfolioEngine
+
+    pe = object.__new__(PortfolioEngine)
+    pe.session = SimpleNamespace(flush=lambda: None)
+    pe.account = SimpleNamespace(peak_value=100_000.0, day_start_value=100_000.0)
+    pe._saxo = object()  # saxo_active True
+    pe._state_cache = {"total_value": 2000.0}
+
+    # Peak stuck at 100k (default) vs a reset 2k account would read ~98% —
+    # re-baseline makes it ~0%.
+    dd = pe.drawdown_pct({})
+    assert dd < 0.01
+    assert pe.account.peak_value == 2000.0
+
+    # A normal small loss still reports a real drawdown (no spurious reset).
+    pe.account.peak_value = 2000.0
+    pe._state_cache = {"total_value": 1900.0}
+    assert abs(pe.drawdown_pct({}) - 0.05) < 0.001   # 5% real drawdown preserved
+
+
 def test_overnight_watch_alerts_on_negative_news(session, monkeypatch):
     from types import SimpleNamespace
 
