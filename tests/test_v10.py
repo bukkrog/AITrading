@@ -682,16 +682,21 @@ def test_risk_appetite_scales_aggression():
     kw = dict(fixed_commission=1.0, commission_pct=0.0008, slippage_bps=5.0)
     levels = [recommend(2000, "EUR", appetite=a, **kw)["recommended"] for a in (1, 2, 3, 4, 5)]
 
-    # Risk per trade rises monotonically with appetite, from 0.5% up to the 2% cap.
-    risks = [lvl["risk_max_risk_per_trade_pct"] for lvl in levels]
-    assert risks == sorted(risks)
-    assert risks[0] == 0.005 and risks[-1] == 0.02
+    # Appetite raises AGGREGATE risk (positions × per-trade risk). Per-trade risk
+    # can dilute at the top end as more positions open, so it's the product that
+    # must rise monotonically, not the per-trade number alone.
+    assert levels[0]["risk_max_risk_per_trade_pct"] == 0.005  # level 1 = 0.5% floor
+    agg = [lvl["risk_max_open_positions"] * lvl["risk_max_risk_per_trade_pct"] for lvl in levels]
+    assert agg == sorted(agg)
 
     # Exposure ceiling rises with appetite; the cost floor (min_notional) falls
     # (more aggressive = accept higher relative cost to trade more).
     assert levels[0]["risk_max_total_exposure_pct"] == 0.40
     assert levels[-1]["risk_max_total_exposure_pct"] == 0.95
     assert levels[0]["min_trade_notional"] > levels[-1]["min_trade_notional"]
+
+    # Aggressive also opens MORE concurrent positions than conservative.
+    assert levels[-1]["risk_max_open_positions"] > levels[0]["risk_max_open_positions"]
 
     # Out-of-range / bad input clamps to 1-5 instead of crashing.
     assert clamp_appetite(99) == 5 and clamp_appetite(0) == 1 and clamp_appetite(None) == 3

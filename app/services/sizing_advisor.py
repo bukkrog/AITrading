@@ -29,12 +29,15 @@ _loop_thread: threading.Thread | None = None
 # risk, no leverage/short. Capital preservation is still the floor. On a small
 # account, higher appetite = more/larger trades; conservative = mostly cash
 # (positions fall below the cost floor), which is the honest conservative result.
+# "positions" is the FLOOR on concurrent holdings for that appetite — aggressive
+# opens more slots, conservative concentrates. Large accounts still scale past it
+# via the capital-based diversification target (~1 per 50k DKK).
 _APPETITE = {
-    1: {"name": "Meget forsigtig", "risk_ceiling": 0.005,  "exposure": 0.40, "roundtrip": 0.010},
-    2: {"name": "Forsigtig",       "risk_ceiling": 0.0075, "exposure": 0.60, "roundtrip": 0.0125},
-    3: {"name": "Balanceret",      "risk_ceiling": 0.010,  "exposure": 0.80, "roundtrip": 0.015},
-    4: {"name": "Aggressiv",       "risk_ceiling": 0.015,  "exposure": 0.95, "roundtrip": 0.020},
-    5: {"name": "Meget aggressiv", "risk_ceiling": 0.020,  "exposure": 0.95, "roundtrip": 0.025},
+    1: {"name": "Meget forsigtig", "risk_ceiling": 0.005,  "exposure": 0.40, "roundtrip": 0.010,  "positions": 2},
+    2: {"name": "Forsigtig",       "risk_ceiling": 0.0075, "exposure": 0.60, "roundtrip": 0.0125, "positions": 3},
+    3: {"name": "Balanceret",      "risk_ceiling": 0.010,  "exposure": 0.80, "roundtrip": 0.015,  "positions": 3},
+    4: {"name": "Aggressiv",       "risk_ceiling": 0.015,  "exposure": 0.95, "roundtrip": 0.020,  "positions": 5},
+    5: {"name": "Meget aggressiv", "risk_ceiling": 0.020,  "exposure": 0.95, "roundtrip": 0.025,  "positions": 6},
 }
 
 
@@ -100,7 +103,8 @@ def recommend(
     # (cost bar wins) while large accounts spread out (diversification target).
     dkk, rate = to_dkk(total_value, currency)
     cost_bar = int(0.95 * total_value / min_notional) if min_notional > 0 else 1
-    diversification = max(3, round(dkk / 50_000))
+    # Diversification target: the appetite floor, scaled up with capital.
+    diversification = max(ap["positions"], round(dkk / 50_000))
     positions = max(1, min(max_positions_cap, cost_bar, diversification))
 
     # Hard concentration guardrail: no single position over 35% of the account,

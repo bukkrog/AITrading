@@ -102,6 +102,7 @@ export function SettingsMenu({ onChanged, onToast }: { onChanged: () => void; on
         enforce_loss_halts: v.enforce_loss_halts,
         streaming_autostart: v.streaming_autostart,
         auto_size_from_capital: v.auto_size_from_capital,
+        risk_appetite: v.risk_appetite,
         circuit_breaker_enabled: v.circuit_breaker_enabled,
         overnight_news_watch: v.overnight_news_watch,
         market_data_source: v.market_data_source,
