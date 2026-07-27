@@ -81,10 +81,14 @@ def recommend(
     max_position_pct = round(min(0.35, max(0.15, 1.3 * 0.95 / positions)), 3)
     # 0.076 ≈ typical 8% ATR stop × 95% deployment; scales down with more slots.
     risk_pct = round(min(0.02, max(0.003, 0.076 / positions)), 4)
-    # Traded universe (Top N) scales with the holdings: ~2× positions gives the
-    # ranker a shortlist plus rotation buffer, without evaluating far more names
-    # than can ever be held. Floor 5, cap 40.
-    top_n = min(40, max(5, positions * 2))
+    # Screening breadth (Top N) is DECOUPLED from holdings: you screen wide and
+    # hold few. Coupling it to positions (old 2× → only 6 names for a 3-slot
+    # account) starves the funnel — discovery ranks 30+ candidates but only the
+    # top 6 ever reach the quant/news/risk gates, and those 6 are often the same
+    # quant-weak names, so nothing trades. Screen a healthy pool (floor 20) and
+    # let max_open_positions cap what's actually held. Scales up for big
+    # accounts; capped at 40 to bound per-tick evaluation cost (news calls).
+    top_n = min(40, max(20, positions * 3))
 
     rationale = [
         f"Min. handel {min_notional:.0f} {currency} holder rundtur-omkostningen "

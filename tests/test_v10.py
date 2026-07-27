@@ -667,15 +667,13 @@ def test_sizing_advisor_scales_with_capital():
     assert big2["recommended"]["risk_max_open_positions"] > 10
     assert recommend(2_000_000, "EUR", **kw)["recommended"]["risk_max_open_positions"] <= 20
 
-    # Top N scales WITH positions (≈2×, floor 5) so the universe grows with the
-    # account — a tiny account gets a small universe, a big one a larger one.
-    # Tiny account: top_n follows 2× positions (floor 5), so a small book gets a
-    # small shortlist.
+    # Top N is a screening breadth DECOUPLED from holdings: screen wide (floor
+    # 20), hold few. It scales up for big accounts but is capped at 40.
     assert small["recommended"]["discovery_top_n"] == min(
-        40, max(5, small["recommended"]["risk_max_open_positions"] * 2)
+        40, max(20, small["recommended"]["risk_max_open_positions"] * 3)
     )
-    assert big["recommended"]["discovery_top_n"] > 5              # bigger account, bigger universe
-    assert big["recommended"]["discovery_top_n"] == min(40, big["recommended"]["risk_max_open_positions"] * 2)
+    assert small["recommended"]["discovery_top_n"] >= 20         # tiny account still screens wide
+    assert big["recommended"]["discovery_top_n"] == min(40, max(20, big["recommended"]["risk_max_open_positions"] * 3))
 
 
 def test_exchange_and_region_from_symbol():
