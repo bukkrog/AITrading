@@ -237,8 +237,12 @@ class Settings(BaseSettings):
     # Commission charged per fill: a fixed amount plus a fraction of notional.
     # Applied in paper mode and used for cost-awareness; when live, Saxo charges
     # its own real commission, so keep these realistic before going live.
-    commission_per_trade: float = 3.0  # fixed, account currency
-    commission_pct: float = 0.0008  # 8 bps of notional
+    # Saxo Classic, US stocks: 0.08% of notional, MINIMUM 1 USD/trade. For the
+    # small trades this account makes (< ~1150 EUR notional) the minimum always
+    # binds, so the effective fixed cost is ~1 (not 3). NB: EU exchanges
+    # (Copenhagen/Xetra) carry higher minimums — raise this if trading EU-heavy.
+    commission_per_trade: float = 1.0  # fixed minimum, account currency (~1 USD)
+    commission_pct: float = 0.0008  # 0.08% of notional (above the minimum)
     slippage_bps: float = 5.0
     # Minimum minutes between trades on the SAME symbol (0 = no limit). Raising
     # this prevents commission-eating churn when trading on a fast timeframe.
