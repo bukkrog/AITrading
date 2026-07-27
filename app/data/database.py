@@ -22,10 +22,12 @@ class Base(DeclarativeBase):
 
 
 # SQLite needs ``check_same_thread=False`` when used across FastAPI threads.
+# ``timeout`` is the busy-wait (seconds) before raising "database is locked" —
+# the background automation loop and API requests write concurrently, so give
+# a writer time to wait out an in-flight transaction instead of failing.
+_is_sqlite = settings.database_url.startswith("sqlite")
 _connect_args = (
-    {"check_same_thread": False}
-    if settings.database_url.startswith("sqlite")
-    else {}
+    {"check_same_thread": False, "timeout": 30.0} if _is_sqlite else {}
 )
 
 engine = create_engine(
@@ -34,6 +36,21 @@ engine = create_engine(
     future=True,
     connect_args=_connect_args,
 )
+
+if _is_sqlite:
+    # WAL lets readers (dashboard/API) run concurrently with the single writer
+    # (the tick loop) instead of blocking, and busy_timeout makes competing
+    # writers wait rather than erroring out. synchronous=NORMAL is durable under
+    # WAL and much faster. Applied to every pooled connection on connect.
+    from sqlalchemy import event
+
+    @event.listens_for(engine, "connect")
+    def _sqlite_pragmas(dbapi_conn, _record):  # pragma: no cover - infra glue
+        cur = dbapi_conn.cursor()
+        cur.execute("PRAGMA journal_mode=WAL")
+        cur.execute("PRAGMA busy_timeout=30000")
+        cur.execute("PRAGMA synchronous=NORMAL")
+        cur.close()
 
 SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
 
