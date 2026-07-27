@@ -242,10 +242,16 @@ def update_settings(update: SettingsUpdate) -> dict:
         elif key.startswith("risk_"):
             # Risk limits live on the nested paper RiskConfig (settings.risk).
             setattr(settings.risk, key[len("risk_"):], value)
+        elif key in _SECRETS:
+            # A secret's empty string means "clear it"; a value sets it.
+            value = value if value != "" else None
+            setattr(settings, key, value)
         else:
-            # For secrets, an empty string means "clear"; a value sets it.
-            setattr(settings, key, value if value != "" else None)
-        applied[key] = value if value != "" else None
+            # Plain settings keep their value as-is. Do NOT coerce "" -> None:
+            # clearing e.g. discovery_sources is a valid action, and None would
+            # crash the ``.split(",")`` consumers (and persist a bad null).
+            setattr(settings, key, value)
+        applied[key] = value
         changed.append(key if key not in _SECRETS else f"{key}(secret)")
     if applied:
         from app.services.settings_store import persist

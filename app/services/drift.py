@@ -17,7 +17,10 @@ from app.data.indicators import realized_volatility
 from app.data.market_data import get_bars_df
 from app.portfolio import attribution
 from app.portfolio.engine import PortfolioEngine
+from app.logging_config import get_logger
 from app.services import alerts_service
+
+logger = get_logger(__name__)
 
 # Thresholds.
 VOL_REGIME_FACTOR = 1.75  # recent vol this many x baseline -> drift
@@ -67,7 +70,14 @@ def check_degradation(session: Session) -> list[str]:
     """
     from app.services.circuit_breaker import _closed_stats
 
-    closed, wins, total_realized = _closed_stats(session)
+    # This runs every tick via monitoring.run_checks; a transient Saxo hiccup
+    # (e.g. an unexpected response shape) must not turn into a dead tick_error —
+    # the circuit breaker wraps the identical call, so match that resilience.
+    try:
+        closed, wins, total_realized = _closed_stats(session)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("degradation check skipped (closed-stats unavailable): %s", exc)
+        return []
     if closed < MIN_CLOSED_TRADES:
         return []
 

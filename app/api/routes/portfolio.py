@@ -85,12 +85,28 @@ def _saxo_portfolio(engine: PortfolioEngine) -> dict | None:
     if positions_value <= 0 and margin_available > 0:
         positions_value = round(max(0.0, cash - margin_available), 2)
 
+    # Reconciliation: equity (total_value) should ≈ cash + open-position P&L.
+    # Anything missing is cost NOT shown in realized/unrealized P&L — commission,
+    # FX-conversion markup, and not-yet-booked transactions. Surface it so the
+    # operator isn't blind to fees (they were previously hidden: commission=0).
+    upnl = round(sum(
+        convert(float(p.get("unrealized_pnl") or 0.0), p.get("currency"), base)
+        for p in snap["positions"]
+    ), 2)
+    cost_gap = round(cash + upnl - total, 2)
+
     dkk = rate_to_dkk(base)
     return {
         "cash": round(cash, 2),
         "positions_value": positions_value,
         "total_value": round(total, 2),
         "margin_available": margin_available,
+        "unrealized_pnl": upnl,
+        # Equity eaten by costs not in P&L (fees + FX + unbooked); >0 = a drag.
+        "cost_gap": cost_gap,
+        "cost_gap_dkk": round(cost_gap * dkk, 2),
+        "cost_to_close": snap.get("cost_to_close"),
+        "transactions_not_booked": snap.get("transactions_not_booked"),
         # DKK equivalents for display (account base currency × the DKK peg).
         "dkk_rate": dkk,
         "total_value_dkk": round(total * dkk, 2),

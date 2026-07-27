@@ -153,6 +153,11 @@ class PortfolioEngine:
             "positions": positions,
             "working_orders": working_orders,
             "orders": orders,
+            # Cost/valuation breakdown from Saxo (see broker_adapter.balance) so
+            # the UI can explain why equity != cash + P&L (fees, FX, unbooked).
+            "cost_to_close": bal.get("cost_to_close"),
+            "transactions_not_booked": bal.get("transactions_not_booked"),
+            "unrealized_margin_pnl": bal.get("unrealized_margin_pnl"),
         }
         _SAXO_CACHE["state"] = state
         _SAXO_CACHE["ts"] = now
@@ -180,6 +185,9 @@ class PortfolioEngine:
             "currency": st["currency"],
             "positions": st["positions"],
             "orders": st.get("orders", []),
+            "cost_to_close": st.get("cost_to_close"),
+            "transactions_not_booked": st.get("transactions_not_booked"),
+            "unrealized_margin_pnl": st.get("unrealized_margin_pnl"),
         }
 
     @property
@@ -254,8 +262,19 @@ class PortfolioEngine:
     # ---- Valuation -----------------------------------------------------
     def positions_value(self, prices: dict[str, float]) -> float:
         if self.saxo_active:
+            # GROSS market value of open positions, in the account currency.
+            # NOT total_value - cash: on a margin account cash isn't debited by a
+            # buy and total_value moves only with P&L, so total - cash returns
+            # P&L (often negative) — which made exposure read NEGATIVE and the
+            # exposure / no-leverage caps never bind. Sum the real position values.
+            from app.services.currency import convert
             st = self._state()
-            return st["total_value"] - st["cash"]
+            base = st.get("currency") or self.account_currency
+            total = 0.0
+            for p in st.get("positions", []):
+                mv = p.get("market_value") or 0.0
+                total += abs(convert(float(mv), p.get("currency") or base, base))
+            return total
         total = 0.0
         for pos in self.open_positions():
             price = prices.get(pos.symbol, pos.avg_price)

@@ -49,6 +49,21 @@ def _pace_order() -> None:
         _last_order_ts[0] = time.monotonic()
 
 
+def _data_rows(data) -> list:
+    """Rows from a Saxo list response, tolerating both shapes.
+
+    Most endpoints return ``{"Data": [...]}``, but some (e.g. closedpositions)
+    can come back as a bare JSON list. Calling ``.get("Data")`` on a list raises
+    ``'list' object has no attribute 'get'`` — the crash that has bitten the tick
+    path more than once — so normalise here.
+    """
+    if isinstance(data, dict):
+        return data.get("Data", []) or []
+    if isinstance(data, list):
+        return data
+    return []
+
+
 class FillResult:
     """A broker's response describing how an order was filled."""
 
@@ -144,7 +159,7 @@ class SaxoBrokerAdapter(BrokerAdapter):
         if self._account_key and self._client_key:
             return self._account_key, self._client_key
         data = self._get("/port/v1/accounts/me")
-        accounts = data.get("Data", [])
+        accounts = _data_rows(data)
         if not accounts:
             raise TradingPlatformError("Saxo: no accounts returned for this token.")
         acc = accounts[0]
@@ -220,7 +235,7 @@ class SaxoBrokerAdapter(BrokerAdapter):
                 "/ref/v1/instruments",
                 {"Keywords": keyword, "AssetTypes": "Stock", "$top": 30},
             )
-            matches = [m for m in data.get("Data", []) if m.get("AssetType") == "Stock"]
+            matches = [m for m in _data_rows(data) if m.get("AssetType") == "Stock"]
             chosen = choose_by_mic(matches, mic, cls)
             if chosen is None:
                 raise TradingPlatformError(
@@ -229,9 +244,9 @@ class SaxoBrokerAdapter(BrokerAdapter):
         else:
             data = self._get(
                 "/ref/v1/instruments",
-                {"Keywords": symbol, "AssetTypes": "Stock"},
+                {"Keywords": symbol, "AssetTypes": "Stock", "$top": 30},
             )
-            matches = [m for m in data.get("Data", []) if m.get("AssetType") == "Stock"]
+            matches = [m for m in _data_rows(data) if m.get("AssetType") == "Stock"]
             if not matches:
                 raise TradingPlatformError(f"Saxo: no Stock instrument found for '{symbol}'.")
             # Reject rather than trade an arbitrary instrument: Saxo's keyword
@@ -322,12 +337,21 @@ class SaxoBrokerAdapter(BrokerAdapter):
 
     def balance(self) -> dict:
         b = self._get("/port/v1/balances/me")
+        if not isinstance(b, dict):
+            b = {}
         return {
             "cash": b.get("CashBalance"),
             "total_value": b.get("TotalValue"),
             "currency": b.get("Currency"),
             "open_positions": b.get("OpenPositionsCount"),
             "margin_available": b.get("MarginAvailableForTrading"),
+            # Cost / valuation breakdown — reveals WHY equity (TotalValue) differs
+            # from cash + open-position P&L: commissions, FX markup and not-yet-
+            # booked transactions all live here, not in CashBalance or realized P&L.
+            "cost_to_close": b.get("CostToClosePositions"),
+            "transactions_not_booked": b.get("TransactionsNotBooked"),
+            "unrealized_margin_pnl": b.get("UnrealizedMarginOpenProfitLoss"),
+            "non_margin_positions_value": b.get("NonMarginPositionsValue"),
         }
 
     # ---- Order routing -------------------------------------------------
@@ -515,13 +539,13 @@ class SaxoBrokerAdapter(BrokerAdapter):
 
     # ---- Portfolio reads ----------------------------------------------
     def open_orders(self) -> list:
-        return self._get("/port/v1/orders/me").get("Data", [])
+        return _data_rows(self._get("/port/v1/orders/me"))
 
     def open_orders_normalized(self) -> list[dict]:
         """Open (working) orders in the platform's shape, for the UI order list."""
         data = self._get("/port/v1/orders/me", {"FieldGroups": "DisplayAndFormat"})
         out: list[dict] = []
-        for o in data.get("Data", []):
+        for o in _data_rows(data):
             df = o.get("DisplayAndFormat", {})
             out.append(
                 {
@@ -538,7 +562,7 @@ class SaxoBrokerAdapter(BrokerAdapter):
         return out
 
     def positions(self) -> list:
-        return self._get("/port/v1/positions/me").get("Data", [])
+        return _data_rows(self._get("/port/v1/positions/me"))
 
     def positions_normalized(self) -> list[dict]:
         """Return open positions in the platform's shape (Saxo = source of truth)."""
@@ -547,7 +571,7 @@ class SaxoBrokerAdapter(BrokerAdapter):
             {"FieldGroups": "DisplayAndFormat,PositionBase,PositionView"},
         )
         out: list[dict] = []
-        for p in data.get("Data", []):
+        for p in _data_rows(data):
             pb = p.get("PositionBase", {})
             pv = p.get("PositionView", {})
             df = p.get("DisplayAndFormat", {})
@@ -593,11 +617,10 @@ class SaxoBrokerAdapter(BrokerAdapter):
             "/port/v1/closedpositions/me",
             {"FieldGroups": "ClosedPosition,DisplayAndFormat", "$top": top},
         )
-        # Saxo returns {"Data": [...]} for most endpoints, but /closedpositions/me
-        # can come back as a bare JSON list — tolerate both shapes.
-        rows = data.get("Data", []) if isinstance(data, dict) else (data or [])
+        # /closedpositions/me can come back as a bare JSON list — _data_rows
+        # tolerates both that and the usual {"Data": [...]} wrapper.
         out: list[dict] = []
-        for r in rows:
+        for r in _data_rows(data):
             if not isinstance(r, dict):
                 continue
             cp = r.get("ClosedPosition", {})
