@@ -96,6 +96,13 @@ def build_pipeline(
     )
 
 
+# Instruments Saxo rejects with "increase exposure not allowed" (e.g. US MLPs
+# configured reduce-only on SIM). Learned at runtime from a failed order so we
+# stop re-attempting them every scan. In-memory: a restart re-learns on the
+# first failure, which also self-heals if Saxo's config changes.
+_REDUCE_ONLY_INSTRUMENTS: set[str] = set()
+
+
 def _order_skip(session: Session, symbol: str, kind: str, exc: Exception) -> None:
     """Record a single failed order without aborting the cycle.
 
@@ -104,6 +111,15 @@ def _order_skip(session: Session, symbol: str, kind: str, exc: Exception) -> Non
     """
     msg = str(exc)
     benign = "SellOrdersAlreadyExist" in msg or "already exists" in msg.lower()
+    # Instrument is reduce-only at the broker — blacklist so we don't retry it.
+    if "ForcedExposureReduction" in msg or "InstrumentForcedExposureReductionViolation" in msg:
+        _REDUCE_ONLY_INSTRUMENTS.add(symbol)
+        audit_log_service.record(
+            session, AuditCategory.ORDER, "reduce_only_blacklist", symbol=symbol,
+            message=f"{symbol} is reduce-only at Saxo — skipping future entries.",
+        )
+        logger.warning("%s is reduce-only at Saxo; blacklisted for entries.", symbol)
+        return
     action = "order_pending" if benign else f"{kind}_order_failed"
     audit_log_service.record(
         session, AuditCategory.ORDER, action, symbol=symbol, message=msg[:400]
@@ -319,6 +335,14 @@ def run_cycle(
         results.append(result)
 
         if result.approved and result.risk.approved_quantity > 0:
+            # Skip instruments the broker has told us are reduce-only (learned
+            # from a prior failed entry) — retrying just spams a 400 every scan.
+            if sym in _REDUCE_ONLY_INSTRUMENTS:
+                audit_log_service.record(
+                    session, AuditCategory.ORDER, "reduce_only_skip", symbol=sym,
+                    message=f"Skipped {sym}: reduce-only at Saxo (blacklisted).",
+                )
+                continue
             qty = result.risk.approved_quantity
             notional = qty * prices[sym]
             # Churn guards (cost-awareness): skip if traded too recently, or the
