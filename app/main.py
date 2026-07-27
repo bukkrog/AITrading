@@ -54,6 +54,18 @@ async def lifespan(app: FastAPI):
         sizing_advisor.ensure_loop()
     except Exception as exc:
         logger.warning("Could not start auto-size: %s", exc)
+    # One-shot: re-baseline the drawdown/daily-loss reference to the live Saxo
+    # account (fixes a bogus drawdown after an out-of-band reset/deposit). Done
+    # here so it is COMMITTED, unlike a lazy per-request re-baseline.
+    try:
+        from app.data.database import session_scope
+        from app.portfolio.engine import PortfolioEngine
+
+        with session_scope() as session:
+            if PortfolioEngine(session).reconcile_drawdown_baseline():
+                logger.info("Re-baselined drawdown reference to the live account.")
+    except Exception as exc:
+        logger.warning("Drawdown baseline reconcile failed: %s", exc)
     logger.info(
         "ai-trading-platform %s starting (env=%s, live_trading=%s)",
         __version__,

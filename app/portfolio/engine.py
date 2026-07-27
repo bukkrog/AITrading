@@ -30,7 +30,6 @@ logger = get_logger(__name__)
 # PortfolioEngine instances (per request / per UI poll) collapse into one call.
 _SAXO_CACHE: dict = {"ts": 0.0, "state": None}
 _SAXO_TTL = 15.0  # UI polls often; balances/positions don't change fast enough to refetch every few seconds
-_BASELINE_RECONCILED = False  # drawdown/day-start re-baselined against the live account once per process
 
 
 def cached_saxo_state() -> dict | None:
@@ -359,24 +358,29 @@ class PortfolioEngine:
         if changed:
             self.session.flush()
 
-    def _maybe_reconcile_once(self, tv: float) -> None:
-        """Re-baseline against the live Saxo account ONCE per process (first read).
-
-        Doing it only once — not on every call — fixes a stale peak after an
-        out-of-band resize (SIM reset / deposit) without erasing a genuine
-        runtime drawdown (a continuous re-baseline would rewrite any drawdown
-        deeper than 33% to zero — the very region the halt guards).
+    def reconcile_drawdown_baseline(self) -> bool:
+        """One-shot at startup: re-baseline peak/day-start to the live Saxo
+        account when the stored reference is stale (out-of-band resize such as a
+        SIM reset). Done at startup — and COMMITTED by the caller's session_scope
+        — rather than lazily per request, because a GET never commits, so a
+        lazy re-baseline was written to memory (flush) but never persisted and
+        the ~98% reading came straight back on the next request. Doing it once at
+        boot also means a genuine runtime drawdown is never rewritten to zero.
         """
-        global _BASELINE_RECONCILED
-        if not _BASELINE_RECONCILED:
-            self._reconcile_baseline_saxo(tv)
-            _BASELINE_RECONCILED = True
+        if not self.saxo_active:
+            return False
+        try:
+            tv = float(self._state().get("total_value") or 0.0)
+        except Exception:
+            return False
+        before = self.account.peak_value
+        self._reconcile_baseline_saxo(tv)
+        return self.account.peak_value != before
 
     def drawdown_pct(self, prices: dict[str, float]) -> float:
         tv = self.total_value(prices)
         if tv <= 0:
             return 0.0  # unknown (transient Saxo failure / cold cache) — don't alarm
-        self._maybe_reconcile_once(tv)
         peak = self.account.peak_value
         if peak <= 0:
             return 0.0
@@ -386,7 +390,6 @@ class PortfolioEngine:
         tv = self.total_value(prices)
         if tv <= 0:
             return 0.0  # unknown — don't raise a false daily-loss alert
-        self._maybe_reconcile_once(tv)
         start = self.account.day_start_value
         if start <= 0:
             return 0.0

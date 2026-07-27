@@ -326,10 +326,9 @@ def test_manual_close_records_to_trade_log():
         assert hit is not None and "manual" in hit["reason"].lower()
 
 
-def test_saxo_drawdown_rebaselines_after_account_resize(monkeypatch):
+def test_saxo_drawdown_rebaselines_after_account_resize():
     from types import SimpleNamespace
 
-    from app.portfolio import engine as eng
     from app.portfolio.engine import PortfolioEngine
 
     pe = object.__new__(PortfolioEngine)
@@ -338,14 +337,13 @@ def test_saxo_drawdown_rebaselines_after_account_resize(monkeypatch):
     pe._saxo = object()  # saxo_active True
     pe._state_cache = {"total_value": 2000.0}
 
-    # Peak stuck at 100k (default) vs a reset 2k account would read ~98% — the
-    # once-per-process re-baseline makes it ~0%.
-    monkeypatch.setattr(eng, "_BASELINE_RECONCILED", False)
-    assert pe.drawdown_pct({}) < 0.01
+    # Startup reconcile re-baselines the stale 100k peak down to the live 2k
+    # account (and reports it changed) — fixing the bogus ~98% drawdown.
+    assert pe.reconcile_drawdown_baseline() is True
     assert pe.account.peak_value == 2000.0
+    assert pe.drawdown_pct({}) < 0.01
 
-    # A genuine runtime drawdown is NOT erased (re-baseline already spent).
-    pe.account.peak_value = 2000.0
+    # After re-baseline, a genuine runtime drawdown IS reported (not erased).
     pe._state_cache = {"total_value": 1200.0}
     assert abs(pe.drawdown_pct({}) - 0.40) < 0.001   # 40% real drawdown preserved
 
