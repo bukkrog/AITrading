@@ -506,7 +506,16 @@ export function SettingsMenu({ onChanged, onToast }: { onChanged: () => void; on
               <button disabled={busy} onClick={applySizing}>Anvend anbefalinger</button>
             </div>
             <div style={{ marginTop: 10, paddingTop: 8, borderTop: "1px solid var(--border)" }}>
-              <Field label="Auto-size fra kapital" hint="Når slået TIL: platformen anvender selv disse anbefalinger hvert cyklus og skalerer positioner/størrelser op og ned, når kontoen ændrer sig. Uafhængig af regime (de ganges sammen).">
+              <Field label="Risiko-appetit (1–5)" hint="Styrer hvor aggressivt auto-size handler: 1 = Meget forsigtig (0,5% risiko/handel, 40% eksponering, høj kostnads-tærskel = få handler) … 5 = Meget aggressiv (2%, 95%, lav tærskel = flere/større handler). Selv 5 er inden for sikre grænser — max 2% risiko, ingen gearing/short. Kapital-skaleringen (antal positioner efter kontostørrelse) bevares uanset trin.">
+                <select value={String(form.risk_appetite ?? 3)} onChange={(e) => set("risk_appetite", Number(e.target.value))}>
+                  <option value="1">1 — Meget forsigtig (0,5% · 40%)</option>
+                  <option value="2">2 — Forsigtig (0,75% · 60%)</option>
+                  <option value="3">3 — Balanceret (1% · 80%)</option>
+                  <option value="4">4 — Aggressiv (1,5% · 95%)</option>
+                  <option value="5">5 — Meget aggressiv (2% · 95%)</option>
+                </select>
+              </Field>
+              <Field label="Auto-size fra kapital" hint="Når slået TIL: platformen anvender selv disse anbefalinger hvert cyklus og skalerer positioner/størrelser op og ned, når kontoen ændrer sig. Appetit-trinnet ovenfor styrer HVOR aggressivt.">
                 <Toggle on={Boolean(form.auto_size_from_capital)} onChange={(v) => set("auto_size_from_capital", v)}
                   onLabel="til — styres dynamisk af kapitalen" offLabel="fra — manuel styring" />
               </Field>

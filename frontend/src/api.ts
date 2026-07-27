@@ -10,6 +10,7 @@ import type {
   DiscoveryCandidate,
   DiscoveryStatus,
   MarketHours,
+  MarketIndex,
   Monitoring,
   Performance,
   Portfolio,
@@ -166,6 +167,7 @@ export const api = {
     get<{ configured: boolean; connected: boolean; access_token_expires_in: number; environment: string }>(
       "/control/saxo/oauth-status",
     ),
+  indices: () => get<{ indices: MarketIndex[] }>("/market/indices"),
   saxoLoginUrl: () => `${BASE || window.location.origin}/control/saxo/login`,
   saxoSelfTest: (symbol: string, placeOrder = false, quantity = 1) =>
     get<{ ok: boolean; symbol: string; placed_order: boolean; steps: { name: string; ok: boolean; detail?: unknown; error?: string }[] }>(

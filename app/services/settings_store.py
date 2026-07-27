@@ -59,7 +59,10 @@ def apply_overrides() -> list[str]:
             scrubbed = True
             continue
         try:
-            if key.startswith("risk_"):
+            if key == "risk_appetite":
+                # Top-level setting despite the risk_ prefix (not a RiskConfig field).
+                setattr(settings, key, value)
+            elif key.startswith("risk_"):
                 setattr(settings.risk, key.removeprefix("risk_"), value)
             else:
                 setattr(settings, key, value)

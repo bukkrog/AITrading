@@ -189,6 +189,11 @@ class Settings(BaseSettings):
     # everything scales with the account as it grows (e.g. monthly deposits).
     # Default ON so the scaling is always active; turn off for fully manual sizing.
     auto_size_from_capital: bool = True
+    # Risk appetite (1-5) drives how aggressive auto-size is: 1=Meget forsigtig
+    # (0.5% risk/trade, 40% exposure), 3=Balanceret (1%, 80%), 5=Meget aggressiv
+    # (2%, 95%). Scales risk per trade, exposure ceiling and the cost floor while
+    # keeping capital-aware position scaling. Even 5 stays within safe bounds.
+    risk_appetite: int = 3
     # Strategy circuit breaker: when on, automation HALTS (stops opening new
     # positions) if realised performance degrades past the trip conditions —
     # a low win rate AND a net realised loss over a meaningful sample. It stays

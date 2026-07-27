@@ -20,6 +20,7 @@ from app.api.routes import (
     control,
     discovery,
     health,
+    market,
     portfolio,
     settings as settings_route,
     signals,
@@ -145,6 +146,7 @@ app.include_router(automation.router)
 app.include_router(alerts.router)
 app.include_router(backtest.router)
 app.include_router(discovery.router)
+app.include_router(market.router)
 app.include_router(settings_route.router)
 
 # Serve the built frontend (frontend/dist) from the API itself, so a server

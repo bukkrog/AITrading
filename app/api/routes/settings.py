@@ -66,6 +66,7 @@ class SettingsUpdate(BaseModel):
     alert_webhook_url: str | None = None
     streaming_autostart: bool | None = None
     auto_size_from_capital: bool | None = None
+    risk_appetite: int | None = None
     circuit_breaker_enabled: bool | None = None
     circuit_breaker_win_rate: float | None = None
     circuit_breaker_min_trades: int | None = None
@@ -143,6 +144,7 @@ def _view() -> dict:
         "regime_enabled": settings.regime_enabled,
         "streaming_autostart": settings.streaming_autostart,
         "auto_size_from_capital": settings.auto_size_from_capital,
+        "risk_appetite": settings.risk_appetite,
         "circuit_breaker_enabled": settings.circuit_breaker_enabled,
         "circuit_breaker_win_rate": settings.circuit_breaker_win_rate,
         "circuit_breaker_min_trades": settings.circuit_breaker_min_trades,
@@ -222,6 +224,7 @@ def sizing_recommendation() -> dict:
         fixed_commission=settings.commission_per_trade,
         commission_pct=settings.commission_pct,
         slippage_bps=settings.slippage_bps,
+        appetite=getattr(settings, "risk_appetite", 3),
     )
 
 
@@ -230,7 +233,13 @@ def update_settings(update: SettingsUpdate) -> dict:
     changed: list[str] = []
     applied: dict = {}
     for key, value in update.model_dump(exclude_unset=True).items():
-        if key.startswith("risk_"):
+        if key == "risk_appetite":
+            # Top-level setting (despite the risk_ prefix); clamp to 1-5.
+            from app.services.sizing_advisor import clamp_appetite
+
+            value = clamp_appetite(value)
+            setattr(settings, key, value)
+        elif key.startswith("risk_"):
             # Risk limits live on the nested paper RiskConfig (settings.risk).
             setattr(settings.risk, key[len("risk_"):], value)
         else:

@@ -22,6 +22,29 @@ logger = get_logger(__name__)
 _APPLY_INTERVAL = 60.0  # re-apply from live capital at most once a minute
 _loop_thread: threading.Thread | None = None
 
+# Risk appetite (1-5) → how aggressive auto-size is. Scales three things: risk
+# taken per trade (bigger positions), the total-exposure ceiling, and the cost
+# floor (aggressive accepts a higher round-trip cost to trade more; conservative
+# only trades cost-efficiently). Even level 5 stays within safe bounds — max 2%
+# risk, no leverage/short. Capital preservation is still the floor. On a small
+# account, higher appetite = more/larger trades; conservative = mostly cash
+# (positions fall below the cost floor), which is the honest conservative result.
+_APPETITE = {
+    1: {"name": "Meget forsigtig", "risk_ceiling": 0.005,  "exposure": 0.40, "roundtrip": 0.010},
+    2: {"name": "Forsigtig",       "risk_ceiling": 0.0075, "exposure": 0.60, "roundtrip": 0.0125},
+    3: {"name": "Balanceret",      "risk_ceiling": 0.010,  "exposure": 0.80, "roundtrip": 0.015},
+    4: {"name": "Aggressiv",       "risk_ceiling": 0.015,  "exposure": 0.95, "roundtrip": 0.020},
+    5: {"name": "Meget aggressiv", "risk_ceiling": 0.020,  "exposure": 0.95, "roundtrip": 0.025},
+}
+
+
+def clamp_appetite(appetite: int | None) -> int:
+    """Coerce to a valid 1-5 appetite level (default Balanced=3)."""
+    try:
+        return min(5, max(1, int(appetite)))
+    except (TypeError, ValueError):
+        return 3
+
 
 def recommend(
     total_value: float,
@@ -30,7 +53,7 @@ def recommend(
     fixed_commission: float,
     commission_pct: float,
     slippage_bps: float,
-    target_roundtrip_cost: float = 0.015,
+    appetite: int = 3,
     max_positions_cap: int = 20,
 ) -> dict:
     """Recommend sizing settings from account value + cost model (native ccy).
@@ -41,6 +64,11 @@ def recommend(
     then follow from how many such positions fit the capital.
     """
     total_value = max(0.0, float(total_value))
+    appetite = clamp_appetite(appetite)
+    ap = _APPETITE[appetite]
+    target_roundtrip_cost = ap["roundtrip"]  # cost floor scales with appetite
+    risk_ceiling = ap["risk_ceiling"]         # caps risk taken per trade
+    exposure = ap["exposure"]                 # total-exposure ceiling
     one_way = float(commission_pct) + float(slippage_bps) / 10000.0
     denom = target_roundtrip_cost - 2 * one_way
 
@@ -79,8 +107,9 @@ def recommend(
     # even on a tiny account where few slots would otherwise imply 40%+. Keeps
     # the "capital preservation first" ceiling that a small account erodes.
     max_position_pct = round(min(0.35, max(0.15, 1.3 * 0.95 / positions)), 3)
-    # 0.076 ≈ typical 8% ATR stop × 95% deployment; scales down with more slots.
-    risk_pct = round(min(0.02, max(0.003, 0.076 / positions)), 4)
+    # 0.076 ≈ typical 8% ATR stop × 95% deployment; scales down with more slots,
+    # and is capped by the risk appetite (level 1=0.5% … level 5=2%).
+    risk_pct = round(min(risk_ceiling, max(0.003, 0.076 / positions)), 4)
     # Screening breadth (Top N) is DECOUPLED from holdings: you screen wide and
     # hold few. Coupling it to positions (old 2× → only 6 names for a 3-slot
     # account) starves the funnel — discovery ranks 30+ candidates but only the
@@ -91,13 +120,15 @@ def recommend(
     top_n = min(40, max(20, positions * 3))
 
     rationale = [
+        f"Risiko-appetit: {appetite} ({ap['name']}) → risiko-loft {risk_ceiling*100:.2f}%/handel, "
+        f"eksponerings-loft {exposure*100:.0f}%, kostnadsmål {target_roundtrip_cost*100:.1f}%.",
         f"Min. handel {min_notional:.0f} {currency} holder rundtur-omkostningen "
         f"under {target_roundtrip_cost*100:.1f}% (fast kurtage {fixed_commission:.0f} "
         f"+ {one_way*100:.2f}% pr. vej).",
         f"Kapitalen rummer ~{positions} positioner af den størrelse "
         f"(loft {max_positions_cap}).",
         f"Risiko/handel {risk_pct*100:.2f}% og maks {max_position_pct*100:.0f}% "
-        f"pr. position følger af antallet af positioner.",
+        f"pr. position.",
     ]
     if denom <= 0:
         rationale.insert(0, "⚠️ De variable omkostninger alene overstiger målet — "
@@ -123,11 +154,14 @@ def recommend(
         "to_dkk_rate": rate,
         "min_notional_dkk": round(min_notional * rate, 2),
         "target_roundtrip_cost_pct": round(target_roundtrip_cost * 100, 2),
+        "risk_appetite": appetite,
+        "risk_appetite_name": ap["name"],
         "recommended": {
             "min_trade_notional": min_notional,
             "risk_max_open_positions": positions,
             "risk_max_position_pct": max_position_pct,
             "risk_max_risk_per_trade_pct": risk_pct,
+            "risk_max_total_exposure_pct": exposure,
             "discovery_top_n": top_n,
         },
         "rationale": rationale,
@@ -163,6 +197,7 @@ def apply_from_capital(session) -> dict | None:
         fixed_commission=settings.commission_per_trade,
         commission_pct=settings.commission_pct,
         slippage_bps=settings.slippage_bps,
+        appetite=getattr(settings, "risk_appetite", 3),
     )["recommended"]
 
     changes = []
@@ -174,7 +209,8 @@ def apply_from_capital(session) -> dict | None:
         settings.discovery_top_n = rec["discovery_top_n"]
     for attr, key in (("max_open_positions", "risk_max_open_positions"),
                       ("max_position_pct", "risk_max_position_pct"),
-                      ("max_risk_per_trade_pct", "risk_max_risk_per_trade_pct")):
+                      ("max_risk_per_trade_pct", "risk_max_risk_per_trade_pct"),
+                      ("max_total_exposure_pct", "risk_max_total_exposure_pct")):
         new = rec[key]
         if getattr(settings.risk, attr) != new:
             changes.append(f"{attr} {getattr(settings.risk, attr)}->{new}")

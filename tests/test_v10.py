@@ -676,6 +676,28 @@ def test_sizing_advisor_scales_with_capital():
     assert big["recommended"]["discovery_top_n"] == min(40, max(20, big["recommended"]["risk_max_open_positions"] * 3))
 
 
+def test_risk_appetite_scales_aggression():
+    from app.services.sizing_advisor import clamp_appetite, recommend
+
+    kw = dict(fixed_commission=1.0, commission_pct=0.0008, slippage_bps=5.0)
+    levels = [recommend(2000, "EUR", appetite=a, **kw)["recommended"] for a in (1, 2, 3, 4, 5)]
+
+    # Risk per trade rises monotonically with appetite, from 0.5% up to the 2% cap.
+    risks = [lvl["risk_max_risk_per_trade_pct"] for lvl in levels]
+    assert risks == sorted(risks)
+    assert risks[0] == 0.005 and risks[-1] == 0.02
+
+    # Exposure ceiling rises with appetite; the cost floor (min_notional) falls
+    # (more aggressive = accept higher relative cost to trade more).
+    assert levels[0]["risk_max_total_exposure_pct"] == 0.40
+    assert levels[-1]["risk_max_total_exposure_pct"] == 0.95
+    assert levels[0]["min_trade_notional"] > levels[-1]["min_trade_notional"]
+
+    # Out-of-range / bad input clamps to 1-5 instead of crashing.
+    assert clamp_appetite(99) == 5 and clamp_appetite(0) == 1 and clamp_appetite(None) == 3
+    assert recommend(2000, "EUR", appetite=99, **kw)["risk_appetite"] == 5
+
+
 def test_exchange_and_region_from_symbol():
     from app.services.market_hours import exchange_label, region_for_symbol
 

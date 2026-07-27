@@ -8,6 +8,7 @@ import { EquityChart } from "./components/EquityChart";
 import { MonitoringPanel } from "./components/MonitoringPanel";
 import { OpenOrders } from "./components/OpenOrders";
 import { PositionChart } from "./components/PositionChart";
+import { IndicesBar } from "./components/IndicesBar";
 import { SettingsMenu } from "./components/SettingsMenu";
 import { Sidebar, type View } from "./components/Sidebar";
 import type {
@@ -178,6 +179,9 @@ export function App() {
         {/* ---- Dashboard ---- */}
         {view === "dashboard" && portfolio && (
           <>
+            {/* Headline US indices — S&P 500, Dow 30, Nasdaq (1-day) */}
+            <IndicesBar />
+
             {portfolio.source === "saxo" && (
               <div className="badge ok" style={{ display: "inline-block", marginBottom: 10 }}>
                 ● Live Saxo account ({portfolio.currency ?? "SIM"}) — balances &amp; positions from Saxo
@@ -270,7 +274,7 @@ export function App() {
                           </td>
                         </tr>
                         <tr>
-                          <td colSpan={10} style={{ padding: "2px 8px 10px" }}>
+                          <td colSpan={10} style={{ padding: "10px 8px 16px" }}>
                             <PositionChart symbol={p.symbol} entry={p.avg_price} />
                           </td>
                         </tr>

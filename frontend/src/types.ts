@@ -268,6 +268,7 @@ export interface SettingsView {
   discovery_region_weights: string;
   streaming_autostart: boolean;
   auto_size_from_capital: boolean;
+  risk_appetite: number;
   circuit_breaker_enabled: boolean;
   circuit_breaker_win_rate: number;
   circuit_breaker_min_trades: number;
@@ -286,6 +287,14 @@ export interface ExchangeStatus {
   hours: string;
   next_open: string | null;
   next_open_local: string | null;
+}
+
+export interface MarketIndex {
+  symbol: string;
+  name: string;
+  last: number | null;
+  change_pct: number | null;
+  spark: number[];
 }
 
 export interface MarketHours {
