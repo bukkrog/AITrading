@@ -224,6 +224,17 @@ kurskilde (EOD, alle børser inkl. København, splits/udbytte, 100k kald/dag) �
 ny market_data_source="eodhd". yfinance beholder discovery-screenere/news/
 earnings (advisory-funktioner). Saxo streaming beholder exits. Opgradér kun til
 ALL-IN-ONE (~$100/md) hvis screener/fundamentals også skal væk fra yfinance.
+DATAKILDE-VALG afhænger af univers (bruger-drøftet):
+  • EU+US (nuværende, region-split): **EODHD "All World" ~$20/md** — eneste
+    billige med ordentlig København/EU-dækning.
+  • US-only (bruger overvejer — mener bedste handler er i US; skal bekræftes af
+    walk-forward): **Tiingo** bedste værdi — GRATIS tier m. EOD+nyheder, men
+    tjek grænser (rate-limits, ~500-1000 unikke symboler/md, personlig-brug-
+    licens); det roterende ~150-navns univers kan skubbe over på billig betalt
+    "Power"-plan (~$10-30/md). Polygon "Starter" (~$29) fungerer også, men de
+    dyre Polygon-tiers ($199+) er realtid/tick = OVERKILL (strategien er dagsbar,
+    Saxo streaming giver realtid). NB: US-only fjerner ikke EUR→USD-FX i sizing
+    (kontoen er stadig EUR) medmindre selve Saxo-kontoen skiftes til USD.
 **Strategi-circuit-breaker** (bruger-besluttet): luk hullet hvor drift.py KUN
 alarmerer ved model-degradering — byg en closed-loop der automatisk pauser
 (eller nedskalerer) en strategi/automation når degraderings-alarmen udløser
