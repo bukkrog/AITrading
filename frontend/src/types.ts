@@ -264,6 +264,7 @@ export interface SettingsView {
   discovery_sources: string;
   discovery_max_pool: number;
   discovery_open_market_only: boolean;
+  discovery_preopen_minutes: number;
   discovery_region_weights: string;
   streaming_autostart: boolean;
   auto_size_from_capital: boolean;

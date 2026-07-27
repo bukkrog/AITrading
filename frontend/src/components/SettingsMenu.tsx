@@ -40,6 +40,7 @@ const NUM_FIELDS = new Set([
   "commission_per_trade", "commission_pct", "slippage_bps",
   "trade_cooldown_minutes", "min_trade_notional",
   "discovery_top_n", "discovery_max_pool", "automation_interval_seconds",
+  "discovery_preopen_minutes",
 ]);
 // Shown/typed as percent, stored on the backend as fractions.
 const PCT_FIELDS = new Set([
@@ -118,6 +119,7 @@ export function SettingsMenu({ onChanged, onToast }: { onChanged: () => void; on
         discovery_sources: v.discovery_sources,
         discovery_max_pool: v.discovery_max_pool,
         discovery_open_market_only: v.discovery_open_market_only,
+        discovery_preopen_minutes: v.discovery_preopen_minutes,
         discovery_region_weights: v.discovery_region_weights,
         automation_interval_seconds: v.automation_interval_seconds,
         automation_universe: v.automation_universe,
@@ -382,6 +384,9 @@ export function SettingsMenu({ onChanged, onToast }: { onChanged: () => void; on
             <Field label="Auto-discover"><Toggle on={Boolean(form.discovery_enabled)} onChange={(v) => set("discovery_enabled", v)} /></Field>
             <Field label="Only open markets" hint="Universe only contains stocks whose exchange is open right now.">
               <Toggle on={Boolean(form.discovery_open_market_only)} onChange={(v) => set("discovery_open_market_only", v)} />
+            </Field>
+            <Field label="Pre-open warmup (min)" hint="Also scan names whose exchange opens within this many minutes, so the universe is ready at the bell. Trading still waits for the real open. 0 = off.">
+              {num("discovery_preopen_minutes", 90)}
             </Field>
             <Field label="Momentum sources" hint="Gathered, ranked by the multi-factor score, top N traded.">
               <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>

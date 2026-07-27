@@ -522,6 +522,24 @@ def test_risk_sizing_converts_budget_to_instrument_currency(monkeypatch):
     assert r.approved and r.approved_quantity >= 5
 
 
+def test_is_open_or_soon_preopen_window(monkeypatch):
+    from datetime import timedelta
+
+    from app.services import market_hours as mh
+
+    # Force "closed now", next open 20 minutes away.
+    monkeypatch.setattr(mh, "is_open", lambda k, now=None: False)
+    monkeypatch.setattr(mh, "_next_open", lambda k, now=None: mh._local_now("America/New_York") + timedelta(minutes=20))
+
+    assert mh.is_open_or_soon("US", within_minutes=30) is True    # 20 min out, within 30
+    assert mh.is_open_or_soon("US", within_minutes=10) is False   # 20 min out, beyond 10
+    assert mh.is_open_or_soon("US", within_minutes=0) is False    # window disabled
+
+    # When it's actually open, always True regardless of window.
+    monkeypatch.setattr(mh, "is_open", lambda k, now=None: True)
+    assert mh.is_open_or_soon("US", within_minutes=0) is True
+
+
 def test_currency_convert_cross_rates():
     from app.services.currency import convert
 

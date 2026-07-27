@@ -475,11 +475,18 @@ def _apply_sector_cap(ranked: list[dict], top_n: int, max_pct: float,
 
 
 def _is_open(symbol: str) -> bool:
-    """Whether ``symbol``'s exchange is trading right now (best-effort)."""
+    """Whether ``symbol``'s exchange is trading now — or opening within the
+    pre-open warmup window, so discovery prepares the universe before the bell.
+    (Trading itself still waits for the real open; this only fills the universe.)
+    """
     try:
+        from app.config import settings
         from app.services import market_hours
 
-        return market_hours.is_open(market_hours.exchange_for_symbol(symbol))
+        return market_hours.is_open_or_soon(
+            market_hours.exchange_for_symbol(symbol),
+            within_minutes=settings.discovery_preopen_minutes,
+        )
     except Exception:  # pragma: no cover - never let this drop a candidate wrongly
         return True
 

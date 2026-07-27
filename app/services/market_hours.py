@@ -114,6 +114,19 @@ def _next_open(ex_key: str, now: datetime | None = None) -> datetime:
     return candidate
 
 
+def is_open_or_soon(ex_key: str, within_minutes: int = 0) -> bool:
+    """Open now, OR opening within ``within_minutes`` — lets discovery warm up
+    the universe just before the bell so it's ready to trade at the open."""
+    ex = EXCHANGES.get(ex_key, EXCHANGES["US"])
+    now = _local_now(ex["tz"])
+    if is_open(ex_key, now):
+        return True
+    if within_minutes <= 0:
+        return False
+    mins = (_next_open(ex_key, now) - now).total_seconds() / 60.0
+    return 0 <= mins <= within_minutes
+
+
 def exchange_status(ex_key: str) -> dict:
     ex = EXCHANGES.get(ex_key, EXCHANGES["US"])
     now = _local_now(ex["tz"])

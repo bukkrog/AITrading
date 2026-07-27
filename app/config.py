@@ -287,6 +287,10 @@ class Settings(BaseSettings):
     # Only pick candidates whose exchange is OPEN right now, so the universe is
     # always tradable and automation doesn't pause on a closed-market pick.
     discovery_open_market_only: bool = True
+    # Pre-open warmup: also include names whose exchange opens within this many
+    # minutes, so the universe is scanned and ready the instant the bell rings.
+    # Trading still waits for the real open — this only prepares the universe.
+    discovery_preopen_minutes: int = 30
 
     # ---- Automation (v3) --------------------------------------------
     automation_interval_seconds: int = 300
