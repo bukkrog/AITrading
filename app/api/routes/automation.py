@@ -70,9 +70,24 @@ def stop(session: Session = Depends(get_session)) -> dict:
 @router.post("/tick")
 def tick(session: Session = Depends(get_session)) -> dict:
     """Run a single guarded cycle now (manual trigger)."""
-    result = automation.tick(session)
-    session.commit()
-    return result
+    import traceback as _tb
+
+    from app.logging_config import get_logger
+
+    try:
+        result = automation.tick(session)
+        session.commit()
+        return result
+    except Exception as exc:  # surface the failure instead of a bare 500
+        session.rollback()
+        tb = _tb.format_exc()
+        get_logger(__name__).error("manual tick failed:\n%s", tb)
+        return {
+            "ran": False,
+            "reason": "error",
+            "error": str(exc),
+            "where": tb.strip().splitlines()[-6:],
+        }
 
 
 @router.post("/emergency-stop")
