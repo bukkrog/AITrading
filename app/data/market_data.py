@@ -94,10 +94,20 @@ def _store_bars(
             ).all()
         }
     count = 0
+    skipped = 0
     for ts, row in df.iterrows():
         key = _norm_ts(ts)
         if key in existing:
             continue
+        # Feeds (e.g. yfinance) can hand back bars with NaN OHLC on non-trading
+        # days or data gaps. Persisting one violates the NOT NULL columns and —
+        # worse — poisons the whole session (PendingRollbackError), so drop it.
+        ohlc = (row.get("open"), row.get("high"), row.get("low"), row.get("close"))
+        if any(pd.isna(v) for v in ohlc):
+            skipped += 1
+            continue
+        vol = row.get("volume", 0.0)
+        vol = 0.0 if pd.isna(vol) else float(vol)
         existing.add(key)  # guard against duplicate rows within this df too
         session.add(
             PriceBar(
@@ -107,12 +117,15 @@ def _store_bars(
                 high=float(row["high"]),
                 low=float(row["low"]),
                 close=float(row["close"]),
-                volume=float(row.get("volume", 0.0)),
+                volume=vol,
             )
         )
         count += 1
     session.flush()
-    logger.info("Stored %d new bars for %s", count, symbol)
+    if skipped:
+        logger.info("Stored %d new bars for %s (skipped %d NaN bars)", count, symbol, skipped)
+    else:
+        logger.info("Stored %d new bars for %s", count, symbol)
     return count
 
 
