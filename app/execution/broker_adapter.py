@@ -593,8 +593,13 @@ class SaxoBrokerAdapter(BrokerAdapter):
             "/port/v1/closedpositions/me",
             {"FieldGroups": "ClosedPosition,DisplayAndFormat", "$top": top},
         )
+        # Saxo returns {"Data": [...]} for most endpoints, but /closedpositions/me
+        # can come back as a bare JSON list — tolerate both shapes.
+        rows = data.get("Data", []) if isinstance(data, dict) else (data or [])
         out: list[dict] = []
-        for r in data.get("Data", []):
+        for r in rows:
+            if not isinstance(r, dict):
+                continue
             cp = r.get("ClosedPosition", {})
             df = r.get("DisplayAndFormat", {})
             pnl = cp.get("ClosedProfitLossInBaseCurrency")

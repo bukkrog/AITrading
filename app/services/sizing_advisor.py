@@ -49,7 +49,21 @@ def recommend(
         # single concentrated position and flag it in the rationale.
         min_notional = max(50.0, total_value)
     else:
-        min_notional = 2.0 * float(fixed_commission) / denom
+        ideal = 2.0 * float(fixed_commission) / denom
+        # Deadlock guard: on a small account the flat-commission cost floor can
+        # sit just above what a risk-disciplined entry reaches (2% risk with a
+        # ~2×ATR stop sizes to ~20-25% of equity), so every trade is skipped
+        # forever. Cap the floor at 22% of equity so such trades clear WITHOUT
+        # widening per-trade risk — but never below the notional where the
+        # round-trip cost would exceed ~2% (below that we'd be trading dust, so
+        # concentrating into fewer positions is the honest call). On larger
+        # accounts the flat floor is far under 22% of equity, so full 1.5% cost
+        # discipline returns automatically.
+        ceiling_2pct = 0.02 - 2 * one_way
+        hard_min = 2.0 * float(fixed_commission) / ceiling_2pct if ceiling_2pct > 0 else ideal
+        min_notional = ideal
+        if total_value > 0:
+            min_notional = max(hard_min, min(ideal, 0.22 * total_value))
     min_notional = max(50.0, math.ceil(min_notional / 50.0) * 50.0)
 
     # Position count = the SMALLER of what the cost bar allows and a
