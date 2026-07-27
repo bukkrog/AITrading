@@ -52,18 +52,18 @@ def recommend(
         ideal = 2.0 * float(fixed_commission) / denom
         # Deadlock guard: on a small account the flat-commission cost floor can
         # sit just above what a risk-disciplined entry reaches (2% risk with a
-        # ~2×ATR stop sizes to ~20-25% of equity), so every trade is skipped
-        # forever. Cap the floor at 22% of equity so such trades clear WITHOUT
+        # ~2×ATR stop sizes to ~15-25% of equity), so every trade is skipped
+        # forever. Cap the floor at 15% of equity so such trades clear WITHOUT
         # widening per-trade risk — but never below the notional where the
-        # round-trip cost would exceed ~2% (below that we'd be trading dust, so
+        # round-trip cost would exceed ~2.5% (below that we'd be trading dust, so
         # concentrating into fewer positions is the honest call). On larger
-        # accounts the flat floor is far under 22% of equity, so full 1.5% cost
+        # accounts the flat floor is far under 15% of equity, so full 1.5% cost
         # discipline returns automatically.
-        ceiling_2pct = 0.02 - 2 * one_way
-        hard_min = 2.0 * float(fixed_commission) / ceiling_2pct if ceiling_2pct > 0 else ideal
+        max_cost = 0.025 - 2 * one_way
+        hard_min = 2.0 * float(fixed_commission) / max_cost if max_cost > 0 else ideal
         min_notional = ideal
         if total_value > 0:
-            min_notional = max(hard_min, min(ideal, 0.22 * total_value))
+            min_notional = max(hard_min, min(ideal, 0.15 * total_value))
     min_notional = max(50.0, math.ceil(min_notional / 50.0) * 50.0)
 
     # Position count = the SMALLER of what the cost bar allows and a
@@ -98,9 +98,10 @@ def recommend(
     if denom <= 0:
         rationale.insert(0, "⚠️ De variable omkostninger alene overstiger målet — "
                             "kontoen/kurtagen egner sig dårligt til denne strategi.")
-    if positions <= 2:
-        rationale.append("⚠️ Få positioner = høj koncentrationsrisiko. Denne konto "
-                         "er i underkanten for en spredt aktiestrategi.")
+    if positions <= 2 or max_position_pct >= 0.30:
+        rationale.append("⚠️ Få positioner / stor andel pr. position = høj "
+                         "koncentrationsrisiko. Denne konto er i underkanten for "
+                         "en spredt aktiestrategi.")
     # Small accounts force higher risk/trade (to clear the cost floor) and more
     # concentration — the OPPOSITE of a big account. Surface it, don't hide it.
     if positions <= 4 and (risk_pct > 0.01 or max_position_pct > 0.20):

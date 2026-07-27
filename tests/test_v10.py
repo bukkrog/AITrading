@@ -669,7 +669,11 @@ def test_sizing_advisor_scales_with_capital():
 
     # Top N scales WITH positions (≈2×, floor 5) so the universe grows with the
     # account — a tiny account gets a small universe, a big one a larger one.
-    assert small["recommended"]["discovery_top_n"] == 5           # floor for tiny account
+    # Tiny account: top_n follows 2× positions (floor 5), so a small book gets a
+    # small shortlist.
+    assert small["recommended"]["discovery_top_n"] == min(
+        40, max(5, small["recommended"]["risk_max_open_positions"] * 2)
+    )
     assert big["recommended"]["discovery_top_n"] > 5              # bigger account, bigger universe
     assert big["recommended"]["discovery_top_n"] == min(40, big["recommended"]["risk_max_open_positions"] * 2)
 
