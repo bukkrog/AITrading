@@ -42,6 +42,16 @@ async def lifespan(app: FastAPI):
         apply_overrides()
     except Exception as exc:
         logger.warning("Could not apply persisted settings: %s", exc)
+    # Resume the Saxo OAuth session FIRST — everything below (auto-size, the
+    # drawdown re-baseline) reads the live Saxo account, so the token must be
+    # active before them, or they no-op on a cold (unauthenticated) broker.
+    try:
+        from app.services import saxo_oauth
+
+        if saxo_oauth.resume():
+            logger.info("Saxo OAuth session resumed from stored refresh token.")
+    except Exception as exc:
+        logger.warning("Saxo OAuth resume failed: %s", exc)
     # Auto-size from capital: apply once now and start the always-on loop so the
     # sizing tracks the account even while Auto Trading is stopped.
     try:
@@ -84,14 +94,6 @@ async def lifespan(app: FastAPI):
                 logger.info("Automation was enabled — background loop resumed.")
     except Exception as exc:  # never block startup on this
         logger.warning("Could not auto-resume automation loop: %s", exc)
-    # Resume a persisted Saxo OAuth session (refresh token survives restarts).
-    try:
-        from app.services import saxo_oauth
-
-        if saxo_oauth.resume():
-            logger.info("Saxo OAuth session resumed from stored refresh token.")
-    except Exception as exc:
-        logger.warning("Saxo OAuth resume failed: %s", exc)
     yield
     from app.services import automation as automation_service
 
