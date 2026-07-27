@@ -158,8 +158,27 @@ def tick(session: Session) -> dict:
             except Exception as exc:  # never let it break the pause
                 logger.warning("overnight news watch failed: %s", exc)
             session.flush()
-            set_activity("Paused — market closed (watching news on holdings)")
-            return {"ran": False, "reason": "market_closed", "market": market}
+            # If a traded exchange opens within the pre-open window, discovery has
+            # already prepared the universe — surface that as a distinct phase so
+            # it's visible (not just "closed").
+            preopen = False
+            try:
+                from app.services import market_hours
+
+                w = settings.discovery_preopen_minutes
+                uni = _universe(state)
+                preopen = w > 0 and any(
+                    market_hours.is_open_or_soon(market_hours.exchange_for_symbol(s), w)
+                    and not market_hours.is_open(market_hours.exchange_for_symbol(s))
+                    for s in uni
+                )
+            except Exception:
+                preopen = False
+            if preopen:
+                set_activity(f"Pre-open warmup — universe prepared ({len(uni)} names), ready for the bell")
+            else:
+                set_activity("Paused — market closed (watching news on holdings)")
+            return {"ran": False, "reason": "preopen" if preopen else "market_closed", "market": market}
         if _market_was_open is False:  # closed -> open transition
             audit_log_service.record(
                 session, AuditCategory.AUTOMATION, "market_open",
