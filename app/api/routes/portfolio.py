@@ -85,15 +85,19 @@ def _saxo_portfolio(engine: PortfolioEngine) -> dict | None:
     if positions_value <= 0 and margin_available > 0:
         positions_value = round(max(0.0, cash - margin_available), 2)
 
-    # Reconciliation: equity (total_value) should ≈ cash + open-position P&L.
-    # Anything missing is cost NOT shown in realized/unrealized P&L — commission,
-    # FX-conversion markup, and not-yet-booked transactions. Surface it so the
-    # operator isn't blind to fees (they were previously hidden: commission=0).
+    # Cost drag NOT shown in realized/unrealized P&L (commission, FX markup, the
+    # cost to close). Measured as (cash + gross positions) − equity. Must include
+    # TransactionsNotBooked so the figure is stable across settlement: at trade
+    # time a buy's cost sits in TransactionsNotBooked (cash still full); once it
+    # settles the same value moves into cash. Their SUM is invariant, so the drag
+    # reads the same before and after — an earlier version used cash alone and
+    # flipped from +149 to −943 the moment purchases settled.
     upnl = round(sum(
         convert(float(p.get("unrealized_pnl") or 0.0), p.get("currency"), base)
         for p in snap["positions"]
     ), 2)
-    cost_gap = round(cash + upnl - total, 2)
+    tnb = float(snap.get("transactions_not_booked") or 0.0)
+    cost_gap = round(cash + tnb + positions_value - total, 2)
 
     dkk = rate_to_dkk(base)
     return {
