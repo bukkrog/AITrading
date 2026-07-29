@@ -7,8 +7,10 @@ from sqlalchemy.orm import Session
 
 from app.data.database import get_session
 from app.data.models import AuditLog, Fill, Order
+from app.logging_config import get_logger
 
 router = APIRouter(prefix="/trades", tags=["trades"])
+logger = get_logger(__name__)
 
 
 @router.get("/log")
@@ -58,6 +60,67 @@ def trade_log(limit: int = 80, session: Session = Depends(get_session)) -> list[
             "commission": round(f.commission, 2),
             "reason": reason,
         })
+
+    # Broker-side closes: a Saxo resting stop fires WITHOUT a local fill, so the
+    # exit would be invisible here (only its P&L shows in attribution). Merge a
+    # synthetic SELL row for any Saxo closed position that has no matching local
+    # SELL fill — so e.g. a stop-loss that fired at the broker still appears.
+    try:
+        from app.core.enums import BrokerMode
+        from app.portfolio.engine import PortfolioEngine
+
+        eng = PortfolioEngine(session)
+        if eng.broker_mode is BrokerMode.SAXO and eng.saxo_active:
+            from app.execution.broker_adapter import build_broker
+
+            def _epoch(x) -> float | None:
+                import datetime as _dt
+
+                if isinstance(x, str):
+                    try:
+                        x = _dt.datetime.fromisoformat(x.replace("Z", "+00:00"))
+                    except Exception:
+                        return None
+                if isinstance(x, _dt.datetime):
+                    if x.tzinfo is None:
+                        x = x.replace(tzinfo=_dt.timezone.utc)
+                    return x.timestamp()
+                return None
+
+            # Local SELL fills by base symbol → if one exists near a Saxo close,
+            # the platform already logged that exit; don't duplicate it.
+            local_sells: dict[str, list[float]] = {}
+            for f in session.scalars(select(Fill).order_by(Fill.ts.desc()).limit(400)).all():
+                if "SELL" in str(f.side).upper():
+                    e = _epoch(f.ts)
+                    if e is not None:
+                        local_sells.setdefault(str(f.symbol).split(":")[0].upper(), []).append(e)
+
+            closed = build_broker(BrokerMode.SAXO).closed_positions_normalized(top=50)
+            for c in closed:
+                base = str(c.get("symbol", "")).split(":")[0].upper()
+                ce = _epoch(c.get("closed_at"))
+                if ce is None:
+                    continue
+                # Already in the ledger via a local sell within ~2 days? skip.
+                if any(abs(e - ce) < 172800 for e in local_sells.get(base, [])):
+                    continue
+                qty = c.get("quantity") or 0
+                px = c.get("close_price") or 0.0
+                out.append({
+                    "ts": c.get("closed_at"),
+                    "symbol": base,
+                    "side": "SELL",
+                    "quantity": qty,
+                    "price": round(px, 4),
+                    "value": round(px * qty, 2),
+                    "commission": 0.0,
+                    "reason": f"broker stop @ Saxo (realised {c.get('realized_pnl', 0.0):+.2f})",
+                })
+            out.sort(key=lambda r: r["ts"] or "", reverse=True)
+            out = out[:limit]
+    except Exception as exc:  # never let reconciliation break the ledger
+        logger.warning("trade-log broker-close merge failed: %s", exc)
     return out
 
 

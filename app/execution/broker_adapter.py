@@ -682,6 +682,8 @@ class SaxoBrokerAdapter(BrokerAdapter):
                 "symbol": str(df.get("Symbol") or cp.get("Uic")).split(":")[0],
                 "realized_pnl": float(pnl),
                 "closed_at": cp.get("ExecutionTimeClose"),
+                "quantity": abs(float(cp.get("Amount") or 0.0)),
+                "close_price": float(cp.get("ClosePrice") or 0.0),
             })
         out.sort(key=lambda x: x.get("closed_at") or "", reverse=True)
         return out

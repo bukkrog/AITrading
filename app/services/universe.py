@@ -73,6 +73,41 @@ _INTL_SOURCES = {"omxc25", "dax", "cac", "europe"}
 # Cache for the ranked result so re-screening throttles under fast ticks.
 _CACHE: dict = {"key": None, "ts": 0.0, "ranked": None}
 _CACHE_TTL = 600.0  # 10 minutes
+# Stale-while-revalidate: the heavy scan (bulk yfinance over ~150 names) must
+# never block the /discovery request — that made the Discovery page hang for
+# 10-30s whenever the cache was cold (e.g. market closed, so the automation loop
+# wasn't warming it). Serve the last scan instantly and refresh in the background.
+import threading as _threading
+
+_SCAN_LOCK = _threading.Lock()
+_SCANNING = [False]
+
+
+def _rescan(key, source_keys, max_symbols, open_market_only) -> None:
+    try:
+        pool = gather(source_keys, max_symbols, open_market_only=open_market_only)
+        ranked_all = rank_by_momentum(pool, len(pool))
+        global _LAST_SCAN
+        _LAST_SCAN = datetime.now(timezone.utc)
+        _CACHE.update(key=key, ts=time.monotonic(), ranked=ranked_all)
+        logger.info("universe.discover: scanned %d candidates (open_only=%s)", len(ranked_all), open_market_only)
+    except Exception as exc:  # never let a background scan crash the thread pool
+        logger.warning("universe background rescan failed: %s", exc)
+    finally:
+        _SCANNING[0] = False
+
+
+def _kick_rescan(key, source_keys, max_symbols, open_market_only) -> None:
+    """Start a background rescan if one isn't already running."""
+    if _SCANNING[0]:
+        return
+    with _SCAN_LOCK:
+        if _SCANNING[0]:
+            return
+        _SCANNING[0] = True
+    _threading.Thread(
+        target=_rescan, args=(key, source_keys, max_symbols, open_market_only), daemon=True
+    ).start()
 
 # Wall-clock timestamp of the last *actual* market scan (cache miss), for the UI.
 _LAST_SCAN: datetime | None = None
@@ -518,9 +553,18 @@ def discover(
     """
     key = (tuple(sorted(source_keys)), max_symbols, open_market_only)
     now = time.monotonic()
-    if _CACHE["key"] == key and (now - _CACHE["ts"]) < _CACHE_TTL and _CACHE["ranked"] is not None:
+    fresh = _CACHE["key"] == key and (now - _CACHE["ts"]) < _CACHE_TTL and _CACHE["ranked"] is not None
+    have_cached = _CACHE["key"] == key and _CACHE["ranked"] is not None
+    if fresh:
         ranked_all = _CACHE["ranked"]
+    elif have_cached:
+        # Stale: serve the last scan instantly, refresh in the background so the
+        # NEXT poll is fresh. The page never blocks on the heavy yfinance scan.
+        ranked_all = _CACHE["ranked"]
+        _kick_rescan(key, source_keys, max_symbols, open_market_only)
     else:
+        # No usable cache (first ever load, or the source set/flag changed) —
+        # we have nothing to serve, so scan synchronously this once.
         pool = gather(source_keys, max_symbols, open_market_only=open_market_only)
         ranked_all = rank_by_momentum(pool, len(pool))  # rank the whole pool
         global _LAST_SCAN
