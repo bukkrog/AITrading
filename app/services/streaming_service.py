@@ -282,8 +282,13 @@ def status() -> dict:
 
 
 def latest_price(symbol: str) -> float | None:
-    """Latest streamed price for a symbol, if the stream carries it."""
-    if _client is None:
+    """Latest streamed price for a symbol, if the stream is LIVE and carries it.
+
+    Returns None when the stream is disconnected — otherwise a dead stream's
+    last-known (hours-old) quote would be overlaid on fresh bars and silently
+    drive sizing and exit checks off stale prices, which is worse than no stream.
+    """
+    if _client is None or not getattr(_client, "connected", False):
         return None
     for uic, sym in _uic_symbol.items():
         if sym == symbol.upper():

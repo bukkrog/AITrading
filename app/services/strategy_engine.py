@@ -384,6 +384,10 @@ def run_cycle(
                         signal_id=result.signal_id,
                     )
                 )
+                # Reserve it so the NEXT symbol this cycle sizes/counts against
+                # the reduced budget — a Saxo order doesn't hit the balance until
+                # it fills, so without this one cycle could open past the caps.
+                pipe.portfolio.reserve_entry(sym, qty, prices[sym])
             except Exception as exc:  # one bad order shouldn't kill the cycle
                 _order_skip(session, sym, "entry", exc)
 

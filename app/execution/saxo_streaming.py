@@ -205,6 +205,16 @@ class SaxoStreamingClient:
         base = _streaming_ws_url(self._environment)
         backoff = 1.0
         while not self._stop.is_set():
+            # Re-read the freshest token each attempt. OAuth rotates
+            # saxo_access_token ~every 18 min; a token captured once at start()
+            # would 401 forever ~20 min in, silently killing real-time exits.
+            try:
+                from app.config import settings as _s
+
+                if _s.saxo_access_token:
+                    self._token = _s.saxo_access_token
+            except Exception:
+                pass
             url = f"{base}?contextId={self._context_id}"
             if self._last_msg_id is not None:  # resume from where we left off
                 url += f"&messageid={self._last_msg_id}"
@@ -226,7 +236,9 @@ class SaxoStreamingClient:
                         except Exception as exc:
                             self.last_error = str(exc)
                             logger.error("Saxo streaming subscription failed: %s", exc)
-                            return
+                            # Don't kill the thread on a transient failure (429 /
+                            # momentary 5xx) — re-raise to trigger reconnect+retry.
+                            raise
                     while not self._stop.is_set():
                         try:
                             raw = await asyncio.wait_for(ws.recv(), timeout=30.0)

@@ -703,6 +703,38 @@ def test_risk_appetite_scales_aggression():
     assert recommend(2000, "EUR", appetite=99, **kw)["risk_appetite"] == 5
 
 
+def test_within_cycle_reservation_accounting(session, monkeypatch):
+    """Entries placed earlier in a cycle must reduce cash / raise positions_value /
+    raise the open-position count so a single Saxo cycle can't blow past the caps
+    (a Saxo order doesn't hit the balance until it fills)."""
+    from app.portfolio.engine import PortfolioEngine
+    from app.services.currency import convert
+
+    pf = PortfolioEngine(session)
+
+    class _StubSaxo:
+        def resolve_uic(self, sym):
+            return 211
+
+    pf._saxo = _StubSaxo()  # force saxo_active
+    state = {"cash": 2000.0, "total_value": 2000.0, "margin_available": 2000.0,
+             "currency": "EUR", "positions": [], "working_orders": {}, "orders": []}
+    monkeypatch.setattr(pf, "_state", lambda: state)
+
+    assert pf.saxo_active
+    assert pf.positions_value({}) == 0.0 and pf.cash == 2000.0
+    assert len(pf.open_positions()) == 0
+
+    pf.reserve_entry("AAPL", 10, 100.0)  # 1000 USD entry mid-cycle
+    exp = abs(convert(1000.0, "USD", "EUR"))
+    assert abs(pf.positions_value({}) - exp) < 0.01           # exposure now counts it
+    assert abs(pf.cash - (2000.0 - exp)) < 0.01               # cash budget reduced
+    assert len(pf.open_positions()) == 1                       # count gate sees it
+    assert pf.get_position("AAPL") is not None                 # one-position-per-symbol
+    # A fresh engine (next cycle) starts with no reservations.
+    assert PortfolioEngine(session)._reservations == []
+
+
 def test_exchange_and_region_from_symbol():
     from app.services.market_hours import exchange_label, region_for_symbol
 

@@ -11,6 +11,7 @@ valuation ignores them and uses Saxo's own numbers.
 """
 from __future__ import annotations
 
+import threading
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -30,21 +31,29 @@ logger = get_logger(__name__)
 # PortfolioEngine instances (per request / per UI poll) collapse into one call.
 _SAXO_CACHE: dict = {"ts": 0.0, "state": None}
 _SAXO_TTL = 15.0  # UI polls often; balances/positions don't change fast enough to refetch every few seconds
+_SAXO_LOCK = threading.Lock()
+# Bumped on every invalidate. A fetch captures this before its network call and
+# refuses to populate the cache if it changed meanwhile — so a read that started
+# BEFORE an order+invalidate can't overwrite the cache with its pre-trade
+# snapshot and serve it as fresh for the full TTL (which under-counted positions
+# / over-stated cash and let a tick open past the limits).
+_SAXO_GEN = [0]
 
 
 def cached_saxo_state() -> dict | None:
     """The shared Saxo snapshot if still fresh, else None (no network call)."""
-    import time as _t
-
-    if _SAXO_CACHE["state"] is not None and (_t.monotonic() - _SAXO_CACHE["ts"]) < _SAXO_TTL:
-        return _SAXO_CACHE["state"]
+    with _SAXO_LOCK:
+        if _SAXO_CACHE["state"] is not None and (time.monotonic() - _SAXO_CACHE["ts"]) < _SAXO_TTL:
+            return _SAXO_CACHE["state"]
     return None
 
 
 def invalidate_saxo_cache() -> None:
     """Force the next Saxo read to fetch fresh (after an order place/cancel)."""
-    _SAXO_CACHE["state"] = None
-    _SAXO_CACHE["ts"] = 0.0
+    with _SAXO_LOCK:
+        _SAXO_CACHE["state"] = None
+        _SAXO_CACHE["ts"] = 0.0
+        _SAXO_GEN[0] += 1
 
 
 @dataclass
@@ -71,6 +80,15 @@ class PortfolioEngine:
         self.account = self._get_or_create_account()
         self._saxo = None
         self._state_cache: dict | None = None
+        # Entries committed EARLIER in the current cycle (Saxo only). A Saxo
+        # market order doesn't change the balance until it fills, so within one
+        # run_cycle the account snapshot is frozen and every entry would size &
+        # count against the same start-of-cycle state — letting a single cycle
+        # blow past max_open_positions and the exposure cap. These reservations
+        # make cash/positions_value/open_positions/get_position reflect the
+        # already-placed entries. Instance-scoped, so a fresh engine per cycle
+        # starts empty. See reserve_entry().
+        self._reservations: list[dict] = []
         if self.broker_mode is BrokerMode.SAXO:
             self._init_saxo()
 
@@ -107,14 +125,42 @@ class PortfolioEngine:
     def saxo_active(self) -> bool:
         return self._saxo is not None
 
+    def reserve_entry(self, symbol: str, quantity: float, price: float) -> None:
+        """Record an entry placed earlier this cycle so later sizing/count in the
+        SAME cycle accounts for it (Saxo only; paper apply_fill already mutates
+        the account synchronously). notional is converted to the account currency.
+        """
+        if not self.saxo_active or quantity <= 0 or price <= 0:
+            return
+        from app.services.currency import convert
+        from app.services.market_hours import currency_for_symbol
+
+        ccy = currency_for_symbol(symbol)
+        base = self.account_currency
+        notional_base = abs(convert(float(quantity) * float(price), ccy, base))
+        uic = None
+        try:
+            uic = self._saxo.resolve_uic(symbol)
+        except Exception:
+            uic = None
+        self._reservations.append({
+            "symbol": _ticker(symbol), "quantity": float(quantity),
+            "uic": uic, "notional_base": notional_base,
+        })
+
+    def _reserved_notional(self) -> float:
+        return sum(r["notional_base"] for r in self._reservations)
+
     def _state(self) -> dict:
         """Return (and cache) the live Saxo account state."""
         if self._state_cache is not None:
             return self._state_cache
         now = time.monotonic()
-        if _SAXO_CACHE["state"] is not None and (now - _SAXO_CACHE["ts"]) < _SAXO_TTL:
-            self._state_cache = _SAXO_CACHE["state"]
-            return self._state_cache
+        with _SAXO_LOCK:
+            if _SAXO_CACHE["state"] is not None and (now - _SAXO_CACHE["ts"]) < _SAXO_TTL:
+                self._state_cache = _SAXO_CACHE["state"]
+                return self._state_cache
+            gen0 = _SAXO_GEN[0]  # snapshot the generation before the network call
 
         try:
             bal = self._saxo.balance()
@@ -130,8 +176,10 @@ class PortfolioEngine:
             # have one; otherwise return a safe empty state WITHOUT caching it
             # (so the very next call retries the broker).
             logger.warning("Saxo state fetch failed (%s); serving last-good/empty.", exc)
-            if _SAXO_CACHE["state"] is not None:
-                self._state_cache = _SAXO_CACHE["state"]
+            with _SAXO_LOCK:
+                last_good = _SAXO_CACHE["state"]
+            if last_good is not None:
+                self._state_cache = last_good
                 return self._state_cache
             return {
                 "cash": 0.0, "total_value": 0.0, "margin_available": 0.0,
@@ -159,8 +207,14 @@ class PortfolioEngine:
             "transactions_not_booked": bal.get("transactions_not_booked"),
             "unrealized_margin_pnl": bal.get("unrealized_margin_pnl"),
         }
-        _SAXO_CACHE["state"] = state
-        _SAXO_CACHE["ts"] = now
+        with _SAXO_LOCK:
+            # Publish to the shared cache ONLY if no invalidate happened while we
+            # were fetching — otherwise this snapshot predates an order and would
+            # be served as "fresh" for the whole TTL. This instance still uses its
+            # own fetch locally either way.
+            if _SAXO_GEN[0] == gen0:
+                _SAXO_CACHE["state"] = state
+                _SAXO_CACHE["ts"] = time.monotonic()
         self._state_cache = state
         return state
 
@@ -193,7 +247,7 @@ class PortfolioEngine:
     @property
     def cash(self) -> float:
         if self.saxo_active:
-            return self._state()["cash"]
+            return self._state()["cash"] - self._reserved_notional()
         return self.account.cash
 
     @property
@@ -228,11 +282,22 @@ class PortfolioEngine:
             # Count working stock orders as engaged slots (avoid exceeding max).
             for uic, amount in st["working_orders"].items():
                 out.append(SaxoPosition(symbol=f"uic:{uic}", quantity=amount or 1.0, avg_price=0.0, uic=uic, asset_type="Stock"))
+            # Count entries placed earlier THIS cycle (not yet in the Saxo
+            # snapshot) so the count gate can't be beaten within one cycle.
+            for r in self._reservations:
+                out.append(SaxoPosition(symbol=r["symbol"], quantity=r["quantity"], avg_price=0.0, uic=r.get("uic"), asset_type="Stock"))
             return out
         return [p for p in self.positions() if p.quantity != 0]
 
     def get_position(self, symbol: str):
         if self.saxo_active:
+            # An entry reserved earlier this cycle counts as held (one position
+            # per symbol) even before it appears in the Saxo snapshot.
+            tkr = _ticker(symbol)
+            for r in self._reservations:
+                if r["symbol"] == tkr:
+                    return SaxoPosition(symbol=symbol, quantity=r["quantity"],
+                                        avg_price=0.0, uic=r.get("uic"), asset_type="Stock")
             try:
                 uic = self._saxo.resolve_uic(symbol)
             except Exception:
@@ -274,7 +339,8 @@ class PortfolioEngine:
             for p in st.get("positions", []):
                 mv = p.get("market_value") or 0.0
                 total += abs(convert(float(mv), p.get("currency") or base, base))
-            return total
+            # Include entries already placed earlier this cycle (see reserve_entry).
+            return total + self._reserved_notional()
         total = 0.0
         for pos in self.open_positions():
             price = prices.get(pos.symbol, pos.avg_price)

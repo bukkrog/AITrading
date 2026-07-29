@@ -49,6 +49,23 @@ def _pace_order() -> None:
         _last_order_ts[0] = time.monotonic()
 
 
+# Serialize closes on the SAME instrument across threads (manual close, the
+# automation tick's exit, a streaming real-time exit, flatten-all). Without this
+# two threads can each read the full position and each place a full-size SELL —
+# on a long-only account that oversells into a SHORT. Keyed by uic.
+_CLOSE_LOCKS: dict = {}
+_CLOSE_LOCKS_GUARD = threading.Lock()
+
+
+def _close_lock(uic) -> threading.Lock:
+    with _CLOSE_LOCKS_GUARD:
+        lk = _CLOSE_LOCKS.get(uic)
+        if lk is None:
+            lk = threading.Lock()
+            _CLOSE_LOCKS[uic] = lk
+        return lk
+
+
 def _data_rows(data) -> list:
     """Rows from a Saxo list response, tolerating both shapes.
 
@@ -443,22 +460,55 @@ class SaxoBrokerAdapter(BrokerAdapter):
         return FillResult(price=fill_price, commission=0.0, slippage=0.0)
 
     def close_position(self, symbol: str) -> dict:
-        """Market-close an open Saxo position identified by its displayed symbol."""
-        positions = self.positions_normalized()
+        """Market-close an open Saxo position identified by its displayed symbol.
+
+        Concurrency-safe: a per-uic lock + a re-read under the lock stop two
+        callers (manual click, tick exit, streaming exit) from each placing a
+        full-size SELL and overselling into a short. Also retries once on
+        ``SellOrdersAlreadyExist`` — Saxo cancels resting stops asynchronously,
+        so a sell fired immediately after the cancel can be rejected; that async
+        lag is why a manual close sometimes only worked on the SECOND click.
+        """
         base = symbol.split(":")[0].upper()
-        match = next(
-            (p for p in positions
-             if str(p["symbol"]).upper() == symbol.upper()
-             or str(p["symbol"]).split(":")[0].upper() == base),
-            None,
-        )
+
+        def _find():
+            return next(
+                (p for p in self.positions_normalized()
+                 if p.get("quantity") and (
+                     str(p["symbol"]).upper() == symbol.upper()
+                     or str(p["symbol"]).split(":")[0].upper() == base)),
+                None,
+            )
+
+        match = _find()
         if not match:
             raise TradingPlatformError(f"No open Saxo position for '{symbol}'.")
-        qty = match["quantity"]
-        side = OrderSide.SELL if qty > 0 else OrderSide.BUY
-        self.cancel_orders_for_uic(match["uic"])  # clear resting stops first
-        result = self.place_market_order(match["symbol"], side, abs(qty), uic=match["uic"])
-        return {"closed": match["symbol"], "quantity": abs(qty), "order": result}
+        uic = match["uic"]
+        with _close_lock(uic):
+            # Re-read under the lock: a concurrent close may have just flattened
+            # (or queued) this position while we waited for the lock.
+            fresh = _find()
+            if not fresh:
+                return {"closed": symbol, "quantity": 0, "order": None,
+                        "note": "already closed / close already in progress"}
+            qty = fresh["quantity"]
+            side = OrderSide.SELL if qty > 0 else OrderSide.BUY
+            self.cancel_orders_for_uic(uic)  # clear resting stops first
+            last_exc = None
+            for attempt in range(3):
+                try:
+                    result = self.place_market_order(fresh["symbol"], side, abs(qty), uic=uic)
+                    return {"closed": fresh["symbol"], "quantity": abs(qty), "order": result}
+                except Exception as exc:
+                    last_exc = exc
+                    msg = str(exc)
+                    if attempt < 2 and ("SellOrdersAlreadyExist" in msg or "already exist" in msg.lower()):
+                        # Resting cancel hasn't propagated yet — re-cancel, wait, retry.
+                        self.cancel_orders_for_uic(uic)
+                        time.sleep(0.6)
+                        continue
+                    raise
+            raise last_exc  # pragma: no cover
 
     def cancel_order(self, order_id: str) -> dict:
         account_key, _ = self._ensure_account()

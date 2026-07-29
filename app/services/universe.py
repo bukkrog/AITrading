@@ -278,34 +278,47 @@ def rank_by_momentum(symbols: list[str], top_n: int) -> list[dict]:
     vol = raw["Volume"] if "Volume" in raw else None
     min_price = settings.discovery_min_price
     min_dvol = settings.discovery_min_dollar_volume
+    cols = getattr(close, "columns", None)
     ranked: list[dict] = []
     for sym in symbols:
+        # Wrap the WHOLE per-symbol body: one malformed ticker (yfinance omits a
+        # delisted/renamed symbol from the columns, a bad row, etc.) must never
+        # abort the entire scan — that froze the universe for a whole session.
         try:
-            s = close[sym].dropna() if sym in getattr(close, "columns", []) else close.dropna()
-        except Exception:
-            continue
-        if len(s) < 55:
-            continue
-        # Liquidity filter: skip penny / thinly-traded names (wide spreads).
-        price = float(s.iloc[-1])
-        if price < min_price:
-            continue
-        if vol is not None and min_dvol > 0:
-            try:
-                v = vol[sym].dropna() if sym in getattr(vol, "columns", []) else vol.dropna()
-                avg_dollar_vol = float((s.tail(20) * v.tail(20)).mean())
-                if avg_dollar_vol < min_dvol:
+            if cols is not None:
+                # Multi-symbol frame: the symbol must be a real column. If it's
+                # missing, SKIP it — the old `close.dropna()` fallback returned
+                # the entire DataFrame and later crashed on float(row).
+                if sym not in cols:
                     continue
-            except Exception:
-                pass
-        score, feats = _factor_score(s)
-        rets = s.pct_change().dropna().tail(60)
-        ranked.append(
-            {"symbol": sym, "score": round(score, 1),
-             "roc": feats["mom_12_1"], **feats,
-             # last 60 daily returns — used by the correlation cap at selection.
-             "returns": [round(float(x), 6) for x in rets],}
-        )
+                s = close[sym].dropna()
+            else:
+                s = close.dropna()  # single-symbol frame is a Series
+            if len(s) < 55:
+                continue
+            # Liquidity filter: skip penny / thinly-traded names (wide spreads).
+            price = float(s.iloc[-1])
+            if price < min_price:
+                continue
+            if vol is not None and min_dvol > 0:
+                try:
+                    v = vol[sym].dropna() if (cols is not None and sym in getattr(vol, "columns", [])) else vol.dropna()
+                    avg_dollar_vol = float((s.tail(20) * v.tail(20)).mean())
+                    if avg_dollar_vol < min_dvol:
+                        continue
+                except Exception:
+                    pass
+            score, feats = _factor_score(s)
+            rets = s.pct_change().dropna().tail(60)
+            ranked.append(
+                {"symbol": sym, "score": round(score, 1),
+                 "roc": feats["mom_12_1"], **feats,
+                 # last 60 daily returns — used by the correlation cap at selection.
+                 "returns": [round(float(x), 6) for x in rets],}
+            )
+        except Exception as exc:
+            logger.debug("discovery: skipping %s (%s)", sym, exc)
+            continue
     ranked.sort(key=lambda r: r["score"], reverse=True)
     return ranked[:top_n]
 

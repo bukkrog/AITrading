@@ -77,6 +77,17 @@ def _store_bars(
     session: Session, symbol: str, df: pd.DataFrame, *, replace: bool = False, **instr_kwargs
 ) -> int:
     instrument = upsert_instrument(session, symbol, **instr_kwargs)
+    # A frame can be non-empty yet all-NaN (yfinance on a delisted/renamed ticker
+    # or a data gap). With replace=True the delete-then-insert would then wipe a
+    # symbol's entire history and store nothing — leaving valuation/stops blind.
+    # Never delete real bars for a frame that carries no valid row.
+    has_valid = any(
+        not any(pd.isna(row.get(c)) for c in ("open", "high", "low", "close"))
+        for _, row in df.iterrows()
+    )
+    if replace and not has_valid:
+        logger.warning("refresh for %s had no valid OHLC rows; keeping existing bars.", symbol)
+        return 0
     if replace:
         # Overwrite: a refresh delivers current truth, so drop stale bars (e.g.
         # leftover synthetic prices) instead of dedup-skipping same-date rows.
