@@ -420,20 +420,31 @@ class SaxoBrokerAdapter(BrokerAdapter):
 
     def execute(self, request: OrderRequest, reference_price: float) -> FillResult:
         side = OrderSide(request.side)
-        # Selling/closing: clear any resting protective orders on the instrument
-        # first, or Saxo rejects with SellOrdersAlreadyExistForOwnedContracts.
-        if side is OrderSide.SELL:
-            try:
-                self.cancel_orders_for_uic(self.resolve_uic(request.symbol))
-            except Exception as exc:  # best effort — the sell may still succeed
-                logger.warning("pre-sell order cleanup failed for %s: %s", request.symbol, exc)
-
         # Deterministic client order id per signal: a retried submission of the
         # same trading intent carries the same reference (idempotency).
         ref = f"aitp-sig-{request.signal_id}" if request.signal_id else None
-        result = self.place_market_order(
-            request.symbol, side, request.quantity, external_ref=ref
-        )
+        if side is OrderSide.SELL:
+            # Serialize the sell on the uic with the manual/streaming close paths
+            # (same _close_lock): two exits on one symbol must NOT each place a
+            # full SELL and oversell into a short. Also clears resting stops first
+            # so Saxo doesn't reject with SellOrdersAlreadyExistForOwnedContracts.
+            try:
+                uic = self.resolve_uic(request.symbol)
+            except Exception:
+                uic = None
+            with _close_lock(uic):
+                if uic is not None:
+                    try:
+                        self.cancel_orders_for_uic(uic)
+                    except Exception as exc:  # best effort — the sell may still succeed
+                        logger.warning("pre-sell order cleanup failed for %s: %s", request.symbol, exc)
+                result = self.place_market_order(
+                    request.symbol, side, request.quantity, uic=uic, external_ref=ref
+                )
+        else:
+            result = self.place_market_order(
+                request.symbol, side, request.quantity, external_ref=ref
+            )
         order_id = result.get("OrderId")
         # Market orders return only an OrderId; the executed price settles
         # asynchronously in the portfolio. Use the current quote as the recorded
@@ -683,7 +694,9 @@ class SaxoBrokerAdapter(BrokerAdapter):
                 "realized_pnl": float(pnl),
                 "closed_at": cp.get("ExecutionTimeClose"),
                 "quantity": abs(float(cp.get("Amount") or 0.0)),
-                "close_price": float(cp.get("ClosePrice") or 0.0),
+                # Saxo's field is ClosingPrice (ClosePrice was always 0.0 → the
+                # trade log showed a broker close at price 0.00). Fall back defensively.
+                "close_price": float(cp.get("ClosingPrice") or cp.get("ClosePrice") or 0.0),
             })
         out.sort(key=lambda x: x.get("closed_at") or "", reverse=True)
         return out

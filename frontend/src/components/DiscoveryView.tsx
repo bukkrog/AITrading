@@ -91,7 +91,11 @@ export function DiscoveryView() {
 
       {/* ranked candidates with momentum bars */}
       {cands.length === 0 ? (
-        <p className="muted">No candidates yet — scanning…</p>
+        <p className="muted">
+          {busy || !status?.last_scan_at
+            ? "Scanning the market…"
+            : "Last scan found no candidates (markets may be closed, or filters too strict)."}
+        </p>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
           {cands.map((c, i) => {

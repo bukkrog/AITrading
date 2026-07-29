@@ -4,7 +4,7 @@ import type { MarketIndex } from "../types";
 
 /** Sparkline for one index — colored by the day's direction. */
 function Spark({ pts, up }: { pts: number[]; up: boolean }) {
-  if (pts.length < 2) return null;
+  if (!Array.isArray(pts) || pts.length < 2) return null;  // guard null/absent spark
   const W = 120, H = 34, pad = 3;
   const min = Math.min(...pts), max = Math.max(...pts);
   const span = max - min || 1;

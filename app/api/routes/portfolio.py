@@ -76,9 +76,9 @@ def _saxo_portfolio(engine: PortfolioEngine) -> dict | None:
     # position was added as if it were EUR 1000, overstating exposure.
     from app.services.currency import convert, rate_to_dkk
 
-    base = snap.get("currency")
+    base = snap.get("currency") or settings.base_currency
     positions_value = round(sum(
-        convert(float(p.get("market_value") or 0.0), p.get("currency"), base)
+        abs(convert(float(p.get("market_value") or 0.0), p.get("currency") or base, base))
         for p in snap["positions"]
     ), 2)
     margin_available = round(float(snap.get("margin_available") or 0.0), 2)
@@ -93,7 +93,7 @@ def _saxo_portfolio(engine: PortfolioEngine) -> dict | None:
     # reads the same before and after — an earlier version used cash alone and
     # flipped from +149 to −943 the moment purchases settled.
     upnl = round(sum(
-        convert(float(p.get("unrealized_pnl") or 0.0), p.get("currency"), base)
+        convert(float(p.get("unrealized_pnl") or 0.0), p.get("currency") or base, base)
         for p in snap["positions"]
     ), 2)
     tnb = float(snap.get("transactions_not_booked") or 0.0)

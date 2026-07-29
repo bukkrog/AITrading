@@ -323,7 +323,8 @@ def rank_by_momentum(symbols: list[str], top_n: int) -> list[dict]:
     if not symbols:
         return []
     raw = yf.download(
-        symbols, period="1y", interval="1d", progress=False, auto_adjust=True
+        symbols, period="1y", interval="1d", progress=False, auto_adjust=True,
+        timeout=30,  # bound the call so a hung fetch can't wedge the background scan
     )
     close = raw["Close"] if "Close" in raw else raw
     vol = raw["Volume"] if "Volume" in raw else None

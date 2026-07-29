@@ -220,8 +220,11 @@ class PortfolioEngine:
 
     def refresh_saxo(self) -> None:
         self._state_cache = None
-        _SAXO_CACHE["state"] = None
-        _SAXO_CACHE["ts"] = 0.0
+        # Delegate to the module-level invalidate so the shared cache is cleared
+        # UNDER _SAXO_LOCK and _SAXO_GEN is bumped — otherwise a concurrent read
+        # that began before this fill could republish its pre-trade snapshot as
+        # fresh (the generation guard was dead on fill/close paths otherwise).
+        invalidate_saxo_cache()
 
     # Instance alias — several call sites (manual close, streaming sync) used
     # engine.invalidate_saxo_cache(); without this method the AttributeError was

@@ -12,6 +12,8 @@ at stream start; trailing peaks are tracked from the streamed prices.
 """
 from __future__ import annotations
 
+import threading
+
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -22,6 +24,7 @@ from app.logging_config import get_logger
 logger = get_logger(__name__)
 
 _client: SaxoStreamingClient | None = None
+_START_LOCK = threading.Lock()  # serialize start() so two callers can't spawn duplicate clients
 _uic_symbol: dict[int, str] = {}
 _entries: dict[str, float] = {}   # symbol -> avg/entry price (cached at start)
 _peaks: dict[str, float] = {}     # symbol -> highest streamed price since start
@@ -153,7 +156,14 @@ def _execute_exit(symbol: str, price: float, reason: str) -> None:
 
 
 def start(session: Session, symbols: list[str] | None = None) -> dict:
-    """Resolve UICs for the universe + open positions and start streaming them."""
+    """Resolve UICs + start streaming, serialized so two callers (the API and
+    ensure()/sync() in one tick) can't spawn duplicate clients on the same
+    ContextId (which Saxo rejects with HTTP 409) and leak a WS thread."""
+    with _START_LOCK:
+        return _start_impl(session, symbols)
+
+
+def _start_impl(session: Session, symbols: list[str] | None = None) -> dict:
     global _client, _uic_symbol, _peaks, _exited, _last_desired
     if not settings.saxo_access_token:
         return {"started": False, "error": "No Saxo token set."}

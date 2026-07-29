@@ -31,6 +31,7 @@ logger = get_logger(__name__)
 
 _thread: threading.Thread | None = None
 _stop = threading.Event()
+_loop_lock = threading.Lock()  # serialize _ensure_loop so two callers can't start two tick loops
 # Tracks the last known market-open state so we log only on open<->closed changes.
 _market_was_open: bool | None = None
 
@@ -368,11 +369,12 @@ def _loop() -> None:
 
 def _ensure_loop() -> None:
     global _thread
-    if _thread is not None and _thread.is_alive():
-        return
-    _stop.clear()
-    _thread = threading.Thread(target=_loop, name="automation-loop", daemon=True)
-    _thread.start()
+    with _loop_lock:  # check-and-start under the lock (no double tick loops)
+        if _thread is not None and _thread.is_alive():
+            return
+        _stop.clear()
+        _thread = threading.Thread(target=_loop, name="automation-loop", daemon=True)
+        _thread.start()
 
 
 def shutdown_loop() -> None:
