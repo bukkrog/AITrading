@@ -289,6 +289,19 @@ export interface ExchangeStatus {
   next_open_local: string | null;
 }
 
+export interface PositionAssessment {
+  symbol: string;
+  quant_score: number | null;
+  verdict: "HOLD" | "SELL" | "UNKNOWN";
+  reason: string;
+  last_price?: number;
+  avg_price?: number;
+  pnl_pct?: number | null;
+  stop_price?: number | null;
+  take_profit_price?: number | null;
+  trailing_stop_price?: number | null;
+}
+
 export interface MarketIndex {
   symbol: string;
   name: string;

@@ -22,6 +22,7 @@ import type {
   Monitoring,
   Performance,
   Portfolio,
+  PositionAssessment,
   Realized,
   Signal,
   Snapshot,
@@ -55,6 +56,7 @@ export function App() {
   const [view, setView] = useState<View>("dashboard");
   const [oauth, setOauth] = useState<{ configured: boolean; connected: boolean; environment: string } | null>(null);
   const [activity, setActivity] = useState<{ current: { text: string; seconds_ago: number }; recent: { text: string; seconds_ago: number }[] } | null>(null);
+  const [assessments, setAssessments] = useState<Record<string, PositionAssessment>>({});
 
   const refresh = useCallback(async () => {
     try {
@@ -86,6 +88,9 @@ export function App() {
       api.performance().then(setPerf).catch(() => setPerf(null));
       api.saxoOauthStatus().then(setOauth).catch(() => setOauth(null));
       api.activity().then(setActivity).catch(() => setActivity(null));
+      api.assessment()
+        .then((r) => setAssessments(Object.fromEntries(r.assessments.map((x) => [x.symbol, x]))))
+        .catch(() => setAssessments({}));
     } catch (e) {
       setError((e as Error).message);
     }
@@ -252,9 +257,13 @@ export function App() {
               <h2>Positions</h2>
               {portfolio.positions.length > 0 ? (
                 <table>
-                  <thead><tr><th>Symbol</th><th>Exchange</th><th>Qty</th><th>Avg</th><th>Last</th><th>Value</th><th>Unrealised P/L</th><th>P/L %</th><th>To stop-loss</th><th></th></tr></thead>
+                  <thead><tr><th>Symbol</th><th>Exchange</th><th>Qty</th><th>Avg</th><th>Last</th><th>Value</th><th>Unrealised P/L</th><th>P/L %</th><th>Verdict</th><th>To stop-loss</th><th></th></tr></thead>
                   <tbody>
-                    {portfolio.positions.map((p) => (
+                    {portfolio.positions.map((p) => {
+                      const a = assessments[p.symbol.split(":")[0].toUpperCase()];
+                      const vColor = a?.verdict === "SELL" ? "var(--neg, #dc2626)"
+                        : a?.verdict === "HOLD" ? "var(--pos, #16a34a)" : "var(--muted, #888)";
+                      return (
                       <Fragment key={p.symbol}>
                         <tr>
                           <td>{p.symbol.split(":")[0]}</td>
@@ -263,6 +272,16 @@ export function App() {
                           <td>{p.last_price.toFixed(2)}</td><td>{fmt(p.market_value)}</td>
                           <td className={p.unrealized_pnl >= 0 ? "pos" : "neg"}>{p.unrealized_pnl.toFixed(2)}</td>
                           <td className={(p.pnl_pct ?? 0) >= 0 ? "pos" : "neg"}>{(p.pnl_pct ?? 0) >= 0 ? "+" : ""}{(p.pnl_pct ?? 0).toFixed(2)}%</td>
+                          <td title={a?.reason ?? ""} style={{ fontSize: 12, whiteSpace: "nowrap" }}>
+                            {a ? (
+                              <>
+                                <span style={{ color: vColor, fontWeight: 600 }}>
+                                  {a.verdict === "SELL" ? "● SELL" : a.verdict === "HOLD" ? "● HOLD" : "?"}
+                                </span>
+                                {a.quant_score != null && <span className="muted"> · q{a.quant_score.toFixed(0)}</span>}
+                              </>
+                            ) : <span className="muted">—</span>}
+                          </td>
                           <td className={p.stop_distance_pct == null ? "muted" : p.stop_distance_pct <= 2 ? "neg" : "pos"}>
                             {p.stop_distance_pct == null
                               ? "no stop"
@@ -274,12 +293,35 @@ export function App() {
                           </td>
                         </tr>
                         <tr>
-                          <td colSpan={10} style={{ padding: "10px 8px 16px" }}>
-                            <PositionChart symbol={p.symbol} entry={p.avg_price} />
+                          <td colSpan={11} style={{ padding: "10px 8px 16px" }}>
+                            <div style={{ display: "flex", gap: 18, alignItems: "center", flexWrap: "wrap" }}>
+                              <div style={{ flex: "0 0 320px", maxWidth: 320 }}>
+                                <PositionChart symbol={p.symbol} entry={p.avg_price} />
+                              </div>
+                              {a && (
+                                <div style={{ fontSize: 12, lineHeight: 1.6, minWidth: 220 }}>
+                                  <div style={{ fontWeight: 600, color: vColor, fontSize: 13 }}>
+                                    {a.verdict === "SELL" ? "Will SELL next cycle"
+                                      : a.verdict === "HOLD" ? "Will HOLD"
+                                      : "No assessment"}
+                                    {a.quant_score != null && (
+                                      <span className="muted" style={{ fontWeight: 400 }}> · quant {a.quant_score.toFixed(0)}/100</span>
+                                    )}
+                                  </div>
+                                  <div className="muted">{a.reason}</div>
+                                  <div className="muted" style={{ marginTop: 3 }}>
+                                    {a.stop_price != null && <>stop-loss @ {a.stop_price.toFixed(2)}</>}
+                                    {a.take_profit_price != null && <> · take-profit @ {a.take_profit_price.toFixed(2)}</>}
+                                    {a.trailing_stop_price != null && <> · trailing @ {a.trailing_stop_price.toFixed(2)}</>}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       </Fragment>
-                    ))}
+                    );
+                    })}
                   </tbody>
                 </table>
               ) : <p className="muted">No open positions.</p>}

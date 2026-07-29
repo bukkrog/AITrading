@@ -396,3 +396,79 @@ def snapshots(limit: int = 200, session: Session = Depends(get_session)) -> list
         }
         for r in reversed(rows)
     ]
+
+
+def _hold_summary(q: float, floor: float, price: float,
+                  stop_px: float | None, tp_px: float | None, trail_px: float | None) -> str:
+    """Short 'why hold' line: quant vs the exit floor + distance to the nearest
+    triggers, so the operator sees how much cushion a HOLD still has."""
+    bits = [f"quant {q:.0f} ≥ {floor:.0f}"]
+    downs = [x for x in (stop_px, trail_px) if x]
+    if downs:  # highest downside trigger = the one price is closest to from above
+        nearest = max(downs)
+        if nearest > 0:
+            bits.append(f"{(price / nearest - 1) * 100:+.1f}% over exit-stop")
+    if tp_px:
+        bits.append(f"{(tp_px / price - 1) * 100:+.1f}% to take-profit")
+    return " · ".join(bits)
+
+
+@router.get("/assessment")
+def positions_assessment(session: Session = Depends(get_session)) -> dict:
+    """Per open position: the platform's current quant rating and whether the
+    exit logic would HOLD or SELL it next cycle.
+
+    Runs the EXACT checks run_cycle uses (stop-loss / take-profit / trailing-stop
+    / momentum-fade via _exit_reason + the same quant score), so the verdict
+    reflects what the platform will actually do — not a re-implementation.
+    """
+    from app.services.strategy_engine import (
+        EXIT_QUANT_SCORE, _exit_reason, _latest_prices, _peak_since, build_pipeline,
+    )
+
+    pipe = build_pipeline(session)
+    positions = [p for p in pipe.portfolio.open_positions()
+                 if not str(getattr(p, "symbol", "")).startswith("uic:")]
+    prices = _latest_prices(session, [p.symbol for p in positions])
+
+    out: list[dict] = []
+    for pos in positions:
+        raw_df = get_bars_df(session, pos.symbol)
+        price = (float(getattr(pos, "last_price", 0.0) or 0.0)
+                 or prices.get(pos.symbol)
+                 or (float(raw_df["close"].iloc[-1]) if len(raw_df) else 0.0))
+        if not price:
+            out.append({"symbol": pos.symbol, "verdict": "UNKNOWN",
+                        "quant_score": None, "reason": "no price data"})
+            continue
+        # Same scale-guard as run_cycle: a wrong-listing bar (e.g. US GMAB vs
+        # Copenhagen GMAB.CO) is ignored for the momentum score.
+        df = raw_df
+        q = 100.0
+        if len(raw_df):
+            last_bar = float(raw_df["close"].iloc[-1])
+            if 0.5 <= (last_bar / price) <= 2.0:
+                q = pipe.quant_agent.analyze(pos.symbol, raw_df).score
+            else:
+                df = raw_df.iloc[0:0]
+        reason = _exit_reason(pos, df, price, q)
+        avg = pos.avg_price or price
+        stop_px = avg * (1 - settings.stop_loss_pct) if settings.stop_loss_pct > 0 else None
+        tp_px = avg * (1 + settings.take_profit_pct) if settings.take_profit_pct > 0 else None
+        trail_px = None
+        if settings.trailing_stop_pct > 0:
+            peak = _peak_since(df, getattr(pos, "opened_at", None), floor=max(avg, price))
+            trail_px = peak * (1 - settings.trailing_stop_pct)
+        out.append({
+            "symbol": pos.symbol,
+            "quant_score": round(q, 1),
+            "verdict": "SELL" if reason else "HOLD",
+            "reason": reason or _hold_summary(q, EXIT_QUANT_SCORE, price, stop_px, tp_px, trail_px),
+            "last_price": round(price, 4),
+            "avg_price": round(avg, 4),
+            "pnl_pct": round((price / avg - 1) * 100, 2) if avg else None,
+            "stop_price": round(stop_px, 4) if stop_px else None,
+            "take_profit_price": round(tp_px, 4) if tp_px else None,
+            "trailing_stop_price": round(trail_px, 4) if trail_px else None,
+        })
+    return {"assessments": out, "exit_quant_floor": EXIT_QUANT_SCORE}
