@@ -31,6 +31,17 @@ på det senere. Dette er RISIKO-BEVIDSTHED, ikke forudsigelse.
   (b) valgfrit: udvid den binære event-veto fra egen-earnings til **peer-earnings**
   (afvis/reducér nye korrelerede entries ind i begivenheden).
 
+## Komponent 2b — Nyheds-spor på bellwethers  (genbrug news-agenten)
+- Peg den eksisterende news-agent (`ai_analysis_service` + heuristik) på bellwethers,
+  ikke kun universet. To spor: KALENDER (planlagte earnings-datoer, kendt på forkant)
+  + NYHED (løbende sentiment på bellwethers).
+- Flag når en bellwether får stærkt negativt/positivt sentiment → korrelerede holdings
+  i fare. Valgfrit: hurtig-exit-signal (defensivt), aldrig auto-køb på det.
+- **Hvad kan forudsiges:** HVORNÅR (earnings-datoen) = ja, ægte foresight → de-risk før.
+  HVAD (beat/miss, retning) = nej, ikke pålideligt. Uplanlagt nyhed = ikke forudsigelig,
+  men nyheds-sporet giver hurtigere REAKTION end pris alene. Featuren styrer
+  risiko-vinduet + hurtig reaktion — den forudsiger IKKE udfaldet.
+
 ## Komponent 3 — Scenarie-stress-test
 - Ny `app/services/scenario.py` + `GET /portfolio/scenario`.
 - Foruddefinerede shocks: "AI/Tech −5%", "marked −3% (SPY)", "semis −8%".
