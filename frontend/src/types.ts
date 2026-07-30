@@ -271,6 +271,8 @@ export interface SettingsView {
   risk_appetite: number;
   concentration_limit_pct: number;
   bellwether_freeze: boolean;
+  event_veto_fail_closed: boolean;
+  max_bar_age_days: number;
   alert_webhook_url: string;
   circuit_breaker_enabled: boolean;
   circuit_breaker_win_rate: number;

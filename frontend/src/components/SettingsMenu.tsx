@@ -105,6 +105,8 @@ export function SettingsMenu({ onChanged, onToast }: { onChanged: () => void; on
         risk_appetite: v.risk_appetite,
         concentration_limit_pct: v.concentration_limit_pct,
         bellwether_freeze: v.bellwether_freeze,
+        event_veto_fail_closed: v.event_veto_fail_closed,
+        max_bar_age_days: v.max_bar_age_days,
         alert_webhook_url: v.alert_webhook_url,
         circuit_breaker_enabled: v.circuit_breaker_enabled,
         overnight_news_watch: v.overnight_news_watch,
@@ -533,6 +535,14 @@ export function SettingsMenu({ onChanged, onToast }: { onChanged: () => void; on
               <Field label="Bellwether-freeze" hint="Når TIL: pauser nye entries mens en bellwether (MSFT/NVDA…) af en sektor du er eksponeret mod rapporterer inden for event-vindet.">
                 <Toggle on={Boolean(form.bellwether_freeze)} onChange={(v) => set("bellwether_freeze", v)}
                   onLabel="til — pauser ved bellwether-earnings" offLabel="fra" />
+              </Field>
+              <Field label="Event-veto fail-closed" hint="Når TIL: hvis earnings-opslaget FEJLER (yfinance throttlet / ukendt ticker), afvises entry i stedet for at gå igennem. Default FRA = går igennem ved data-fejl. Til = maksimal forsigtighed, koster nogle handler når feed'et er ustabilt.">
+                <Toggle on={Boolean(form.event_veto_fail_closed)} onChange={(v) => set("event_veto_fail_closed", v)}
+                  onLabel="til — afvis ved data-fejl" offLabel="fra — gå igennem ved data-fejl" />
+              </Field>
+              <Field label="Max bar-alder (dage)" hint="Spring en NY entry over hvis dens seneste kurs-bar er ældre end dette (forældet kurs sizer ellers forkert). 0 = fra. 4 dækker en lang weekend + helligdag.">
+                <input type="number" min="0" step="1" value={String(form.max_bar_age_days ?? 4)}
+                  onChange={(e) => set("max_bar_age_days", Number(e.target.value))} style={{ maxWidth: 100 }} />
               </Field>
               <Field label="Alarm-webhook (kritiske hændelser)" hint="Indsæt en Telegram/Slack/Discord/generisk webhook-URL. KRITISKE alarmer (halt, kill switch, stor drawdown, tick-fejl) POSTes dertil, så du får besked out-of-band — også hvis du ikke har dashboardet åbent. Tom = fra.">
                 <input type="text" value={String(form.alert_webhook_url ?? "")} placeholder="https://hooks.slack.com/…"

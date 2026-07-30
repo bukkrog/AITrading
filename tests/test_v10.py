@@ -920,3 +920,28 @@ def test_sector_risk_gate_blocks_when_over_limit(monkeypatch):
     monkeypatch.setattr(exposure_risk, "concentration",
                         lambda h: {"concentration_pct": 40.0, "proxies": []})
     assert exposure_risk.sector_risk_block([{"symbol": "NU", "market_value": 100}]) is None
+
+
+def test_event_veto_fail_closed(monkeypatch):
+    from app.config import settings
+    from app.services import event_risk
+
+    monkeypatch.setattr(settings, "market_data_source", "yfinance")
+    monkeypatch.setattr(settings, "event_veto_days", 5)
+    monkeypatch.setattr(event_risk, "_ai_binary_event", lambda s, d: None)
+
+    def _boom(_s):
+        raise RuntimeError("yfinance throttled")
+
+    monkeypatch.setattr(event_risk, "_next_earnings_date", _boom)
+
+    # Fail-open (default): a lookup error must NOT veto.
+    event_risk._CACHE.clear()
+    monkeypatch.setattr(settings, "event_veto_fail_closed", False)
+    assert event_risk.check("TEST") is None
+
+    # Fail-closed: a lookup error vetoes to be safe.
+    event_risk._CACHE.clear()
+    monkeypatch.setattr(settings, "event_veto_fail_closed", True)
+    v = event_risk.check("TEST")
+    assert v and v["type"] == "lookup_failed"

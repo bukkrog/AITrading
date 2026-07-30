@@ -28,20 +28,22 @@ _CACHE: dict[str, tuple[date, dict | None]] = {}
 
 
 def _next_earnings_date(symbol: str) -> date | None:
-    """Next scheduled earnings date from yfinance, or None."""
-    try:
-        import yfinance as yf
+    """Next scheduled earnings date from yfinance, or None if there is none.
 
-        cal = yf.Ticker(symbol).calendar or {}
-        dates = cal.get("Earnings Date") or []
-        if isinstance(dates, (list, tuple)) and dates:
-            d = dates[0]
-            if isinstance(d, datetime):
-                return d.date()
-            if isinstance(d, date):
-                return d
-    except Exception:
-        pass
+    Raises on a LOOKUP failure (network/throttle) — the caller distinguishes
+    'confirmed no earnings' (None) from 'could not check' (exception) so the
+    fail-closed policy can veto only on the latter.
+    """
+    import yfinance as yf
+
+    cal = yf.Ticker(symbol).calendar or {}
+    dates = cal.get("Earnings Date") or []
+    if isinstance(dates, (list, tuple)) and dates:
+        d = dates[0]
+        if isinstance(d, datetime):
+            return d.date()
+        if isinstance(d, date):
+            return d
     return None
 
 
@@ -105,7 +107,16 @@ def check(symbol: str) -> dict | None:
             yf_sym = base
 
     verdict: dict | None = None
-    earnings = _next_earnings_date(yf_sym)
+    try:
+        earnings = _next_earnings_date(yf_sym)
+    except Exception as exc:
+        # Could not verify. Fail-open (default) lets the trade through; fail-closed
+        # vetoes to be safe. Don't cache a fail-closed verdict — a transient feed
+        # error shouldn't block the symbol for the rest of the day.
+        logger.info("earnings lookup failed for %s: %s", symbol, exc)
+        if settings.event_veto_fail_closed:
+            return {"type": "lookup_failed", "detail": "earnings ukendt — vetoer (fail-closed)"}
+        earnings = None
     if earnings and today <= earnings <= today + timedelta(days=days):
         verdict = {"type": "earnings", "detail": f"earnings {earnings.isoformat()}"}
     if verdict is None:

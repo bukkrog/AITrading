@@ -161,6 +161,12 @@ class Settings(BaseSettings):
     # via yfinance calendar; FDA/court/M&A via Claude when AI is configured).
     # This is where news/AI genuinely protects capital. 0 disables.
     event_veto_days: int = 5
+    # Fail-closed: when True, if the earnings lookup ERRORS (yfinance throttled /
+    # unresolvable ticker) the entry is VETOED rather than allowed through. Default
+    # False keeps the documented fail-open policy (a veto for KNOWN events, not a
+    # data-availability gate) — turn on for maximum caution at the cost of some
+    # missed entries when the feed is flaky.
+    event_veto_fail_closed: bool = False
 
     # ---- Exit rules (v8) --------------------------------------------
     # Automatic sell triggers, on top of the momentum exit (quant < 50). All are

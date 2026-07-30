@@ -69,6 +69,8 @@ class SettingsUpdate(BaseModel):
     risk_appetite: int | None = None
     concentration_limit_pct: float | None = None
     bellwether_freeze: bool | None = None
+    event_veto_fail_closed: bool | None = None
+    max_bar_age_days: int | None = None
     circuit_breaker_enabled: bool | None = None
     circuit_breaker_win_rate: float | None = None
     circuit_breaker_min_trades: int | None = None
@@ -149,6 +151,8 @@ def _view() -> dict:
         "risk_appetite": settings.risk_appetite,
         "concentration_limit_pct": settings.concentration_limit_pct,
         "bellwether_freeze": settings.bellwether_freeze,
+        "event_veto_fail_closed": settings.event_veto_fail_closed,
+        "max_bar_age_days": settings.max_bar_age_days,
         "circuit_breaker_enabled": settings.circuit_breaker_enabled,
         "circuit_breaker_win_rate": settings.circuit_breaker_win_rate,
         "circuit_breaker_min_trades": settings.circuit_breaker_min_trades,
