@@ -63,10 +63,10 @@ på det senere. Dette er RISIKO-BEVIDSTHED, ikke forudsigelse.
    + fix af event_veto's ikke-US symbol-resolution (saxo_to_yahoo).
 3. ✅ **GJORT (55ead65):** Grafisk "Risk Radar"-panel på dashboardet (`RiskRadar.tsx`)
    — koncentrations-bars, bellwether-countdown+news, scenarie-P&L-bars.
-4. ⬜ **TILBAGE (bevidst behavior-change, opt-in):** wire koncentration + bellwether
-   ind i risk-motorens sizing — koncentrations-loft (afvis/reducér entry der skubber
-   én sektor-faktor over grænse) + peer-earnings-veto. Kun read-only pt.; dette lader
-   featuren *handle*. Kræver eksplicit bruger-OK + omhyggelig test (ændrer handel).
+4. ✅ **GJORT (6c9bf32):** Sektor-risiko-gate (handlende lag) — `concentration_limit_pct`
+   + `bellwether_freeze` (begge OFF default), `exposure_risk.sector_risk_block()`,
+   gate i run_cycle (pauser nye entries, aldrig exits), Setup-toggles. Opt-in.
+   FÆRDIG — hele featuren (radar + panel + gate) er bygget.
 
 ## Data/infra
 Genbrug 60-dages returns (discovery) + yfinance (proxier/bellwether-bars/earnings —
