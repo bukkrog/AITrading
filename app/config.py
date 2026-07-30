@@ -194,6 +194,15 @@ class Settings(BaseSettings):
     # (2%, 95%). Scales risk per trade, exposure ceiling and the cost floor while
     # keeping capital-aware position scaling. Even 5 stays within safe bounds.
     risk_appetite: int = 3
+    # Sector-risk gate (DESIGN_sector_risk.md #4) — the ACTING layer, opt-in.
+    # Both default OFF so a deploy changes nothing; the read-only Risk Radar runs
+    # regardless. They can only PAUSE new entries, never widen anything.
+    # concentration_limit_pct > 0: block NEW entries when the portfolio's largest
+    # sector beta (SPY/QQQ/SMH) already meets/exceeds this % (e.g. 150).
+    concentration_limit_pct: float = 0.0
+    # bellwether_freeze: when a bellwether of a sector you're exposed to reports
+    # within event_veto_days, pause NEW entries until it's past.
+    bellwether_freeze: bool = False
     # Strategy circuit breaker: when on, automation HALTS (stops opening new
     # positions) if realised performance degrades past the trip conditions —
     # a low win rate AND a net realised loss over a meaningful sample. It stays

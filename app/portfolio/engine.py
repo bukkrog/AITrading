@@ -350,6 +350,30 @@ class PortfolioEngine:
             total += pos.quantity * price
         return total
 
+    def holdings_base(self) -> list[dict]:
+        """Open holdings as [{symbol, market_value}] in the account currency —
+        shared input for the risk radars (concentration / scenario / bellwether)
+        and the sector-risk gate. Best-effort; empty on any read failure."""
+        from app.services.currency import convert
+
+        out: list[dict] = []
+        try:
+            if self.saxo_active:
+                snap = self.saxo_snapshot()
+                base = snap.get("currency") or settings.base_currency
+                for p in snap.get("positions", []):
+                    mv = abs(convert(float(p.get("market_value") or 0.0), p.get("currency") or base, base))
+                    if mv:
+                        out.append({"symbol": p["symbol"], "market_value": mv})
+            else:
+                for pos in self.open_positions():
+                    mv = float(getattr(pos, "quantity", 0) or 0) * float(getattr(pos, "last_price", 0) or getattr(pos, "avg_price", 0) or 0)
+                    if mv:
+                        out.append({"symbol": pos.symbol, "market_value": mv})
+        except Exception:
+            return []
+        return out
+
     def total_value(self, prices: dict[str, float]) -> float:
         if self.saxo_active:
             return self._state()["total_value"]

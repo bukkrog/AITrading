@@ -103,6 +103,8 @@ export function SettingsMenu({ onChanged, onToast }: { onChanged: () => void; on
         streaming_autostart: v.streaming_autostart,
         auto_size_from_capital: v.auto_size_from_capital,
         risk_appetite: v.risk_appetite,
+        concentration_limit_pct: v.concentration_limit_pct,
+        bellwether_freeze: v.bellwether_freeze,
         circuit_breaker_enabled: v.circuit_breaker_enabled,
         overnight_news_watch: v.overnight_news_watch,
         market_data_source: v.market_data_source,
@@ -519,6 +521,17 @@ export function SettingsMenu({ onChanged, onToast }: { onChanged: () => void; on
               <Field label="Auto-size fra kapital" hint="Når slået TIL: platformen anvender selv disse anbefalinger hvert cyklus og skalerer positioner/størrelser op og ned, når kontoen ændrer sig. Appetit-trinnet ovenfor styrer HVOR aggressivt.">
                 <Toggle on={Boolean(form.auto_size_from_capital)} onChange={(v) => set("auto_size_from_capital", v)}
                   onLabel="til — styres dynamisk af kapitalen" offLabel="fra — manuel styring" />
+              </Field>
+            </div>
+            <div style={{ marginTop: 10, paddingTop: 8, borderTop: "1px solid var(--border)" }}>
+              <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Sektor-risiko-gate (Risk Radar — handlende lag, opt-in)</div>
+              <Field label="Koncentrations-loft %" hint="0 = FRA. Når &gt;0: pauser NYE entries hvis porteføljens største sektor-beta (SPY/QQQ/SMH) allerede er ≥ dette (fx 150). Kun read-only radar kører når FRA. Kan kun pause — aldrig udvide.">
+                <input type="number" min="0" step="10" value={String(form.concentration_limit_pct ?? 0)}
+                  onChange={(e) => set("concentration_limit_pct", Number(e.target.value))} style={{ maxWidth: 120 }} />
+              </Field>
+              <Field label="Bellwether-freeze" hint="Når TIL: pauser nye entries mens en bellwether (MSFT/NVDA…) af en sektor du er eksponeret mod rapporterer inden for event-vindet.">
+                <Toggle on={Boolean(form.bellwether_freeze)} onChange={(v) => set("bellwether_freeze", v)}
+                  onLabel="til — pauser ved bellwether-earnings" offLabel="fra" />
               </Field>
             </div>
             <table style={{ width: "100%", marginTop: 10, fontSize: 12 }}>

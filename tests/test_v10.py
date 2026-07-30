@@ -898,3 +898,25 @@ def test_bellwether_assess_flags_imminent_and_news():
     assert "MSFT" in syms and syms["MSFT"]["imminent"]        # reports in 2 days
     assert "NVDA" not in syms                                  # 30d out + neutral -> not flagged
     assert "AAPL" in syms and not syms["AAPL"]["imminent"]    # flagged on bearish news alone
+
+
+def test_sector_risk_gate_blocks_when_over_limit(monkeypatch):
+    from app.config import settings
+    from app.services import exposure_risk
+
+    # Both OFF by default -> never blocks (no network either).
+    monkeypatch.setattr(settings, "concentration_limit_pct", 0.0)
+    monkeypatch.setattr(settings, "bellwether_freeze", False)
+    assert exposure_risk.sector_risk_block([{"symbol": "NU", "market_value": 100}]) is None
+
+    # Enable a 100% concentration limit; stub concentration above it -> block.
+    monkeypatch.setattr(settings, "concentration_limit_pct", 100.0)
+    monkeypatch.setattr(exposure_risk, "concentration",
+                        lambda h: {"concentration_pct": 150.0, "proxies": []})
+    r = exposure_risk.sector_risk_block([{"symbol": "NU", "market_value": 100}])
+    assert r and "koncentration" in r.lower()
+
+    # Under the limit -> no block.
+    monkeypatch.setattr(exposure_risk, "concentration",
+                        lambda h: {"concentration_pct": 40.0, "proxies": []})
+    assert exposure_risk.sector_risk_block([{"symbol": "NU", "market_value": 100}]) is None

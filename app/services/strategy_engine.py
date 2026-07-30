@@ -314,6 +314,24 @@ def run_cycle(
         )
         symbols = []
 
+    # Sector-risk gate (DESIGN_sector_risk.md #4) — opt-in ACTING layer. Only
+    # computed when enabled (zero overhead by default). Pauses NEW entries when
+    # the book is already over-concentrated in a sector or a bellwether of an
+    # exposed sector reports within the window. Exits are never blocked.
+    if _entries_ok and symbols and (settings.concentration_limit_pct > 0 or settings.bellwether_freeze):
+        try:
+            from app.services.exposure_risk import sector_risk_block
+
+            _sr = sector_risk_block(pipe.portfolio.holdings_base())
+        except Exception as exc:  # never let the radar break the cycle
+            logger.warning("sector-risk gate skipped: %s", exc)
+            _sr = None
+        if _sr:
+            audit_log_service.record(
+                session, AuditCategory.SYSTEM, "sector_risk_block", message=_sr,
+            )
+            symbols = []
+
     for sym in symbols:
         from app.services.activity import set_activity
 

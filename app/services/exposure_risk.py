@@ -108,6 +108,32 @@ def _fetch_returns(symbols: list[str]) -> dict:
     return out
 
 
+def sector_risk_block(holdings_dicts: list[dict]) -> str | None:
+    """The ACTING layer (opt-in): return a reason to PAUSE new entries this cycle
+    for sector risk, else None. Both gates default OFF (settings) so behaviour is
+    unchanged until enabled. Can only pause — never widens anything.
+    """
+    from app.config import settings
+
+    if not (settings.concentration_limit_pct > 0 or settings.bellwether_freeze):
+        return None
+    conc = concentration(holdings_dicts)
+    limit = settings.concentration_limit_pct
+    if limit > 0 and conc.get("concentration_pct", 0.0) >= limit:
+        return (f"Sektor-koncentration {conc['concentration_pct']:.0f}% ≥ loft "
+                f"{limit:.0f}% — pauser nye (korrelerede) entries.")
+    if settings.bellwether_freeze:
+        from app.services import bellwether
+
+        rad = bellwether.radar(conc)
+        imminent = [b for b in rad.get("bellwethers", []) if b.get("imminent")]
+        if imminent:
+            names = ", ".join(b["symbol"] for b in imminent[:3])
+            return (f"Bellwether-freeze: {names} rapporterer i vinduet og du er "
+                    f"sektor-eksponeret — pauser nye entries til det er ovre.")
+    return None
+
+
 def concentration(holdings_dicts: list[dict]) -> dict:
     """Public entry: [{symbol, market_value}] -> concentration report (cached)."""
     holdings = [(str(h["symbol"]).split(":")[0].upper(), float(h["market_value"]))

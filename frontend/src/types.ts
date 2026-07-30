@@ -269,6 +269,8 @@ export interface SettingsView {
   streaming_autostart: boolean;
   auto_size_from_capital: boolean;
   risk_appetite: number;
+  concentration_limit_pct: number;
+  bellwether_freeze: boolean;
   circuit_breaker_enabled: boolean;
   circuit_breaker_win_rate: number;
   circuit_breaker_min_trades: number;
