@@ -103,5 +103,15 @@ def run_checks(session: Session) -> list[str]:
         if alerts_service.raise_alert(session, "daily_loss", msg, severity=AlertSeverity.CRITICAL):
             raised.append(msg)
 
+    # Silent-stop guard: broker is Saxo but no token -> orders can't execute at
+    # all. Raise CRITICAL so it reaches the alert webhook out-of-band (a missing
+    # token after a restart otherwise halts trading silently).
+    from app.core.enums import BrokerMode
+
+    if pf.broker_mode is BrokerMode.SAXO and not (settings.saxo_access_token or "").strip():
+        msg = "Saxo mangler token — automatiseret handel kan ikke eksekvere. Log ind / indsæt token i Setup."
+        if alerts_service.raise_alert(session, "saxo_no_token", msg, severity=AlertSeverity.CRITICAL):
+            raised.append(msg)
+
     raised.extend(drift.check_all(session))
     return raised
