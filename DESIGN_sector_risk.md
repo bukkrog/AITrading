@@ -56,8 +56,9 @@ på det senere. Dette er RISIKO-BEVIDSTHED, ikke forudsigelse.
 
 ---
 
-## Build-rækkefølge
-1. Koncentrations-radar (read-only) — fanger præcis dagens problem, ingen adfærdsændring.
+## Build-rækkefølge (fremdrift)
+1. ✅ **GJORT (commit 3a0386d):** Koncentrations-radar backend — `app/services/exposure_risk.py`
+   + `GET /portfolio/concentration` + hermetisk test. Mangler: frontend-kort (step 2).
 2. Bellwether-kalender (advarsel, + fix danske-ticker-bug).
 3. Scenarie-stress-test (read-only tabel).
 4. Wire koncentration ind i risk-motorens sizing.
