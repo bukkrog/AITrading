@@ -503,3 +503,45 @@ def bellwether_risk(session: Session = Depends(get_session)) -> dict:
     out = bellwether.radar(conc)
     out["exposed_sectors"] = [p for p in conc.get("proxies", []) if abs(p.get("exposure_pct", 0)) >= 40.0]
     return out
+
+
+@router.get("/costs")
+def costs(session: Session = Depends(get_session)) -> dict:
+    """All-in cost transparency: how much of the equity change is FEES/FX/spread,
+    which price-P&L hides. Identity: equity = baseline + realized_price_pnl +
+    unrealized_pnl - costs, so cost = baseline + realized + unrealized - equity.
+    baseline = assumed starting capital (peak_value); assumes no deposits."""
+    from app.services.currency import convert
+
+    engine = PortfolioEngine(session)
+    base_ccy = engine.account_currency
+    try:
+        if engine.saxo_active:
+            snap = engine.saxo_snapshot()
+            equity = float(snap.get("total_value") or 0.0)
+            b = snap.get("currency") or base_ccy
+            unrealized = round(sum(
+                convert(float(p.get("unrealized_pnl") or 0.0), p.get("currency") or b, b)
+                for p in snap.get("positions", [])), 2)
+        else:
+            prices = _prices(session, [p.symbol for p in engine.positions()])
+            equity = float(engine.total_value(prices))
+            unrealized = round(attribution_mod.compute(session, prices).total_unrealized, 2)
+    except Exception:
+        return {"error": "data unavailable", "currency": base_ccy}
+    realized = float(realized_by_symbol(session).get("total") or 0.0)
+    baseline = float(getattr(engine.account, "peak_value", 0.0) or equity)
+    est_cost = round(baseline + realized + unrealized - equity, 2)
+    net = round(equity - baseline, 2)
+    return {
+        "currency": base_ccy,
+        "baseline": round(baseline, 2),
+        "equity": round(equity, 2),
+        "net_pnl": net,
+        "realized_price_pnl": round(realized, 2),
+        "unrealized_pnl": unrealized,
+        "estimated_cost": est_cost,
+        # of a net LOSS, how much is cost rather than bad trades:
+        "cost_share_of_loss_pct": round(est_cost / abs(net) * 100, 0) if (net < 0 and est_cost > 0) else None,
+        "note": "Estimeret (kurtage+FX+spread). Antager ingen ind-/udbetalinger; baseline = peak/startkapital.",
+    }

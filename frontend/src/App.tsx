@@ -10,6 +10,7 @@ import { OpenOrders } from "./components/OpenOrders";
 import { PositionChart } from "./components/PositionChart";
 import { IndicesBar } from "./components/IndicesBar";
 import { RiskRadar } from "./components/RiskRadar";
+import { CostCard } from "./components/CostCard";
 import { SettingsMenu } from "./components/SettingsMenu";
 import { Sidebar, type View } from "./components/Sidebar";
 import type {
@@ -255,6 +256,7 @@ export function App() {
               <EquityChart snapshots={snapshots} />
             </div>
 
+            <CostCard />
             <RiskRadar />
 
             <div className="card section-gap">

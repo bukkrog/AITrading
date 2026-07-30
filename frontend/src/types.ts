@@ -291,6 +291,19 @@ export interface ExchangeStatus {
   next_open_local: string | null;
 }
 
+export interface Costs {
+  currency: string;
+  baseline: number;
+  equity: number;
+  net_pnl: number;
+  realized_price_pnl: number;
+  unrealized_pnl: number;
+  estimated_cost: number;
+  cost_share_of_loss_pct: number | null;
+  note?: string;
+  error?: string;
+}
+
 export interface Concentration {
   proxies: { label: string; proxy: string; is_sector: boolean; exposure_pct: number; covered_pct: number }[];
   concentration_pct: number;
