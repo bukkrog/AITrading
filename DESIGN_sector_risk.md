@@ -57,11 +57,16 @@ på det senere. Dette er RISIKO-BEVIDSTHED, ikke forudsigelse.
 ---
 
 ## Build-rækkefølge (fremdrift)
-1. ✅ **GJORT (commit 3a0386d):** Koncentrations-radar backend — `app/services/exposure_risk.py`
-   + `GET /portfolio/concentration` + hermetisk test. Mangler: frontend-kort (step 2).
-2. Bellwether-kalender (advarsel, + fix danske-ticker-bug).
-3. Scenarie-stress-test (read-only tabel).
-4. Wire koncentration ind i risk-motorens sizing.
+1. ✅ **GJORT (3a0386d):** Koncentrations-radar backend + `GET /portfolio/concentration`.
+2. ✅ **GJORT (0607e12):** Bellwether-kalender + nyheds-spor (`bellwether.py`,
+   `/portfolio/bellwether-risk`) + scenarie-stress (`scenario.py`, `/portfolio/scenario`)
+   + fix af event_veto's ikke-US symbol-resolution (saxo_to_yahoo).
+3. ✅ **GJORT (55ead65):** Grafisk "Risk Radar"-panel på dashboardet (`RiskRadar.tsx`)
+   — koncentrations-bars, bellwether-countdown+news, scenarie-P&L-bars.
+4. ⬜ **TILBAGE (bevidst behavior-change, opt-in):** wire koncentration + bellwether
+   ind i risk-motorens sizing — koncentrations-loft (afvis/reducér entry der skubber
+   én sektor-faktor over grænse) + peer-earnings-veto. Kun read-only pt.; dette lader
+   featuren *handle*. Kræver eksplicit bruger-OK + omhyggelig test (ændrer handel).
 
 ## Data/infra
 Genbrug 60-dages returns (discovery) + yfinance (proxier/bellwether-bars/earnings —
