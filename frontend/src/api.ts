@@ -3,10 +3,13 @@ import type {
   Attribution,
   AuditEntry,
   AutomationInfo,
+  BellwetherRisk,
   BrokerHealth,
   BrokerModeInfo,
   ComparisonRow,
+  Concentration,
   Config,
+  ScenarioStress,
   DiscoveryCandidate,
   DiscoveryStatus,
   MarketHours,
@@ -170,6 +173,9 @@ export const api = {
     ),
   indices: () => get<{ indices: MarketIndex[] }>("/market/indices"),
   assessment: () => get<{ assessments: PositionAssessment[]; exit_quant_floor: number }>("/portfolio/assessment"),
+  concentration: () => get<Concentration>("/portfolio/concentration"),
+  scenarioStress: () => get<ScenarioStress>("/portfolio/scenario"),
+  bellwetherRisk: () => get<BellwetherRisk>("/portfolio/bellwether-risk"),
   saxoLoginUrl: () => `${BASE || window.location.origin}/control/saxo/login`,
   saxoSelfTest: (symbol: string, placeOrder = false, quantity = 1) =>
     get<{ ok: boolean; symbol: string; placed_order: boolean; steps: { name: string; ok: boolean; detail?: unknown; error?: string }[] }>(

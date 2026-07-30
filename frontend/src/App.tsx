@@ -9,6 +9,7 @@ import { MonitoringPanel } from "./components/MonitoringPanel";
 import { OpenOrders } from "./components/OpenOrders";
 import { PositionChart } from "./components/PositionChart";
 import { IndicesBar } from "./components/IndicesBar";
+import { RiskRadar } from "./components/RiskRadar";
 import { SettingsMenu } from "./components/SettingsMenu";
 import { Sidebar, type View } from "./components/Sidebar";
 import type {
@@ -253,6 +254,9 @@ export function App() {
               <h2>Equity curve</h2>
               <EquityChart snapshots={snapshots} />
             </div>
+
+            <RiskRadar />
+
             <div className="card section-gap">
               <h2>Positions</h2>
               {portfolio.positions.length > 0 ? (

@@ -289,6 +289,27 @@ export interface ExchangeStatus {
   next_open_local: string | null;
 }
 
+export interface Concentration {
+  proxies: { label: string; proxy: string; is_sector: boolean; exposure_pct: number; covered_pct: number }[];
+  concentration_pct: number;
+  n_holdings: number;
+  warning: string | null;
+  error?: string;
+}
+
+export interface ScenarioStress {
+  scenarios: { label: string; proxy: string; shock_pct: number; pnl: number; pnl_pct: number; covered_pct: number }[];
+  n_holdings: number;
+  error?: string;
+}
+
+export interface BellwetherRisk {
+  bellwethers: { symbol: string; sector_proxy: string; next_earnings: string | null; days_until: number | null; imminent: boolean; news_score: number | null }[];
+  note?: string;
+  watched?: string[];
+  exposed_sectors?: { label: string; proxy: string; exposure_pct: number }[];
+}
+
 export interface PositionAssessment {
   symbol: string;
   quant_score: number | null;
