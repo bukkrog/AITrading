@@ -271,6 +271,7 @@ export interface SettingsView {
   risk_appetite: number;
   concentration_limit_pct: number;
   bellwether_freeze: boolean;
+  alert_webhook_url: string;
   circuit_breaker_enabled: boolean;
   circuit_breaker_win_rate: number;
   circuit_breaker_min_trades: number;

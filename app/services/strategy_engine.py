@@ -340,6 +340,23 @@ def run_cycle(
         if not len(df):
             logger.warning("No price data for %s; skipping.", sym)
             continue
+        # Freshness guard: a stale last bar (yfinance failed for days / a delisted
+        # ticker) would size a NEW entry AND its ATR stop off wrong prices. Skip.
+        # Not for synthetic (offline/tests use fixed historical dates).
+        if settings.max_bar_age_days > 0 and settings.market_data_source != "synthetic":
+            try:
+                ts = df.index[-1]
+                ts = ts.to_pydatetime() if hasattr(ts, "to_pydatetime") else ts
+                if ts.tzinfo is None:
+                    ts = ts.replace(tzinfo=timezone.utc)
+                if (datetime.now(timezone.utc) - ts).days > settings.max_bar_age_days:
+                    audit_log_service.record(
+                        session, AuditCategory.ORDER, "stale_data_skip", symbol=sym,
+                        message=f"Skipped {sym}: latest bar {(datetime.now(timezone.utc) - ts).days}d old (> {settings.max_bar_age_days}d).",
+                    )
+                    continue
+            except Exception:
+                pass
         result = signal_engine.evaluate(
             session,
             sym,

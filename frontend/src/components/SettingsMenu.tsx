@@ -105,6 +105,7 @@ export function SettingsMenu({ onChanged, onToast }: { onChanged: () => void; on
         risk_appetite: v.risk_appetite,
         concentration_limit_pct: v.concentration_limit_pct,
         bellwether_freeze: v.bellwether_freeze,
+        alert_webhook_url: v.alert_webhook_url,
         circuit_breaker_enabled: v.circuit_breaker_enabled,
         overnight_news_watch: v.overnight_news_watch,
         market_data_source: v.market_data_source,
@@ -532,6 +533,10 @@ export function SettingsMenu({ onChanged, onToast }: { onChanged: () => void; on
               <Field label="Bellwether-freeze" hint="Når TIL: pauser nye entries mens en bellwether (MSFT/NVDA…) af en sektor du er eksponeret mod rapporterer inden for event-vindet.">
                 <Toggle on={Boolean(form.bellwether_freeze)} onChange={(v) => set("bellwether_freeze", v)}
                   onLabel="til — pauser ved bellwether-earnings" offLabel="fra" />
+              </Field>
+              <Field label="Alarm-webhook (kritiske hændelser)" hint="Indsæt en Telegram/Slack/Discord/generisk webhook-URL. KRITISKE alarmer (halt, kill switch, stor drawdown, tick-fejl) POSTes dertil, så du får besked out-of-band — også hvis du ikke har dashboardet åbent. Tom = fra.">
+                <input type="text" value={String(form.alert_webhook_url ?? "")} placeholder="https://hooks.slack.com/…"
+                  onChange={(e) => set("alert_webhook_url", e.target.value)} style={{ minWidth: 240 }} />
               </Field>
             </div>
             <table style={{ width: "100%", marginTop: 10, fontSize: 12 }}>

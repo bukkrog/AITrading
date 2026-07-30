@@ -199,6 +199,10 @@ class Settings(BaseSettings):
     # regardless. They can only PAUSE new entries, never widen anything.
     # concentration_limit_pct > 0: block NEW entries when the portfolio's largest
     # sector beta (SPY/QQQ/SMH) already meets/exceeds this % (e.g. 150).
+    # Skip a NEW entry when its latest bar is older than this (0 = off). Guards
+    # against a stale last-close (yfinance failed for days / delisted) sizing an
+    # entry + its ATR stop off wrong prices. 4d clears a long weekend + holiday.
+    max_bar_age_days: int = 4
     concentration_limit_pct: float = 0.0
     # bellwether_freeze: when a bellwether of a sector you're exposed to reports
     # within event_veto_days, pause NEW entries until it's past.
