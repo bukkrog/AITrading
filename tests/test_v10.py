@@ -871,3 +871,30 @@ def test_concentration_radar_beta_weighting():
     assert res["warning"]  # 150% >> 80% sector threshold -> concentration warning
     # SMH proxy is absent from rmap -> simply skipped, no crash.
     assert all(p["proxy"] != "SMH" for p in res["proxies"])
+
+
+def test_scenario_stress_pnl():
+    import pandas as pd
+    from app.services.scenario import stress
+
+    idx = pd.RangeIndex(60)
+    qqq = pd.Series([0.01 * ((i % 5) - 2) for i in range(60)], index=idx)
+    rmap = {"QQQ": qqq, "SPY": pd.Series([0.0] * 60, index=idx), "A": qqq * 1.0}
+    res = stress([("A", 1000.0)], rmap)
+    q = next(s for s in res["scenarios"] if s["proxy"] == "QQQ")
+    # beta 1.0, shock -5% -> P&L = 1000 * 1 * -0.05 = -50
+    assert abs(q["pnl"] - (-50.0)) < 0.5
+
+
+def test_bellwether_assess_flags_imminent_and_news():
+    from datetime import date, timedelta
+    from app.services.bellwether import assess
+
+    today = date(2026, 1, 1)
+    earnings = {"MSFT": today + timedelta(days=2), "NVDA": today + timedelta(days=30), "AAPL": None}
+    news = {"MSFT": 50, "NVDA": 50, "AAPL": 20}  # AAPL strongly bearish
+    res = assess(["QQQ"], earnings, news, days=7, today=today)
+    syms = {b["symbol"]: b for b in res["bellwethers"]}
+    assert "MSFT" in syms and syms["MSFT"]["imminent"]        # reports in 2 days
+    assert "NVDA" not in syms                                  # 30d out + neutral -> not flagged
+    assert "AAPL" in syms and not syms["AAPL"]["imminent"]    # flagged on bearish news alone

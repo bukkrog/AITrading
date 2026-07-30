@@ -92,8 +92,20 @@ def check(symbol: str) -> dict | None:
     if cached and cached[0] == today:
         return cached[1]
 
+    # Resolve to the yfinance ticker: a Saxo symbol carries its MIC (e.g.
+    # NOVOb:xcse), so yf.Ticker("NOVO") would be the WRONG company (a US
+    # microcap). Map suffixed symbols via saxo_to_yahoo (NOVOb:xcse -> NOVO-B.CO).
+    yf_sym = base
+    if ":" in symbol:
+        try:
+            from app.execution.saxo_symbols import saxo_to_yahoo
+
+            yf_sym = saxo_to_yahoo(symbol) or base
+        except Exception:
+            yf_sym = base
+
     verdict: dict | None = None
-    earnings = _next_earnings_date(base)
+    earnings = _next_earnings_date(yf_sym)
     if earnings and today <= earnings <= today + timedelta(days=days):
         verdict = {"type": "earnings", "detail": f"earnings {earnings.isoformat()}"}
     if verdict is None:

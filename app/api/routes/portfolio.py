@@ -500,3 +500,47 @@ def concentration(session: Session = Depends(get_session)) -> dict:
     except Exception:
         holds = []
     return exposure_risk.concentration(holds)
+
+
+def _holdings_base(engine) -> list[dict]:
+    """Open holdings as [{symbol, market_value_in_base_ccy}] (shared by the radars)."""
+    from app.services.currency import convert
+
+    holds: list[dict] = []
+    try:
+        if engine.saxo_active:
+            snap = engine.saxo_snapshot()
+            base = snap.get("currency") or settings.base_currency
+            for p in snap.get("positions", []):
+                mv = abs(convert(float(p.get("market_value") or 0.0), p.get("currency") or base, base))
+                if mv:
+                    holds.append({"symbol": p["symbol"], "market_value": mv})
+        else:
+            for pos in engine.open_positions():
+                mv = float(getattr(pos, "quantity", 0) or 0) * float(getattr(pos, "last_price", 0) or getattr(pos, "avg_price", 0) or 0)
+                if mv:
+                    holds.append({"symbol": pos.symbol, "market_value": mv})
+    except Exception:
+        return []
+    return holds
+
+
+@router.get("/scenario")
+def scenario(session: Session = Depends(get_session)) -> dict:
+    """Scenario stress-test (DESIGN_sector_risk.md #3): estimated portfolio P&L
+    under predefined sector/market down-shocks. Read-only."""
+    from app.services import scenario as scenario_svc
+
+    return scenario_svc.scenario(_holdings_base(PortfolioEngine(session)))
+
+
+@router.get("/bellwether-risk")
+def bellwether_risk(session: Session = Depends(get_session)) -> dict:
+    """Bellwether radar (DESIGN_sector_risk.md #2/#2b): sector leaders reporting
+    soon (or with strongly directional news) for the sectors we're exposed to."""
+    from app.services import bellwether, exposure_risk
+
+    conc = exposure_risk.concentration(_holdings_base(PortfolioEngine(session)))
+    out = bellwether.radar(conc)
+    out["exposed_sectors"] = [p for p in conc.get("proxies", []) if abs(p.get("exposure_pct", 0)) >= 40.0]
+    return out
