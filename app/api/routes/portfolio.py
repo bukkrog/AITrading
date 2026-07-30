@@ -472,3 +472,31 @@ def positions_assessment(session: Session = Depends(get_session)) -> dict:
             "trailing_stop_price": round(trail_px, 4) if trail_px else None,
         })
     return {"assessments": out, "exit_quant_floor": EXIT_QUANT_SCORE}
+
+
+@router.get("/concentration")
+def concentration(session: Session = Depends(get_session)) -> dict:
+    """Sector-concentration radar (DESIGN_sector_risk.md #1): value-weighted
+    portfolio beta to SPY/QQQ/SMH, so a set of positions that are really one
+    sector bet is surfaced. Read-only; does not affect trading."""
+    from app.services import exposure_risk
+    from app.services.currency import convert
+
+    engine = PortfolioEngine(session)
+    holds: list[dict] = []
+    try:
+        if engine.saxo_active:
+            snap = engine.saxo_snapshot()
+            base = snap.get("currency") or settings.base_currency
+            for p in snap.get("positions", []):
+                mv = abs(convert(float(p.get("market_value") or 0.0), p.get("currency") or base, base))
+                if mv:
+                    holds.append({"symbol": p["symbol"], "market_value": mv})
+        else:
+            for pos in engine.open_positions():
+                mv = float(getattr(pos, "quantity", 0) or 0) * float(getattr(pos, "last_price", 0) or getattr(pos, "avg_price", 0) or 0)
+                if mv:
+                    holds.append({"symbol": pos.symbol, "market_value": mv})
+    except Exception:
+        holds = []
+    return exposure_risk.concentration(holds)

@@ -848,3 +848,26 @@ def test_insufficient_history_is_neutral():
     for cls in STRATEGY_REGISTRY.values():
         q = cls().score_latest("TEST", tiny)
         assert q.score == 0.0  # guarded, no crash
+
+
+def test_concentration_radar_beta_weighting():
+    """Value-weighted portfolio beta to a proxy is computed correctly (pure fn)."""
+    import pandas as pd
+    from app.services.exposure_risk import compute_concentration
+
+    idx = pd.RangeIndex(60)
+    qqq = pd.Series([0.01 * ((i % 5) - 2) for i in range(60)], index=idx)
+    spy = pd.Series([0.01 * (((i + 2) % 7) - 3) for i in range(60)], index=idx)
+    rmap = {
+        "QQQ": qqq, "SPY": spy,
+        "A": qqq * 1.0,   # beta 1.0 to QQQ
+        "B": qqq * 2.0,   # beta 2.0 to QQQ
+    }
+    res = compute_concentration([("A", 100.0), ("B", 100.0)], rmap)
+    qqq_exp = next(p["exposure_pct"] for p in res["proxies"] if p["proxy"] == "QQQ")
+    # equal-weight 0.5*1 + 0.5*2 = 1.5x -> 150%
+    assert abs(qqq_exp - 150.0) < 1.0
+    assert res["n_holdings"] == 2
+    assert res["warning"]  # 150% >> 80% sector threshold -> concentration warning
+    # SMH proxy is absent from rmap -> simply skipped, no crash.
+    assert all(p["proxy"] != "SMH" for p in res["proxies"])
