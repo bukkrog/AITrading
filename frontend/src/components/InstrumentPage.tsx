@@ -63,13 +63,21 @@ function PriceLine({ symbol }: { symbol: string }) {
     const area = `${line} L${x(closes.length - 1).toFixed(1)},${H - pad} L${x(0).toFixed(1)},${H - pad} Z`;
     return { line, area, up, W, H };
   }, [closes]);
+  const rangeChg = closes && closes.length >= 2 && closes[0]
+    ? ((closes[closes.length - 1] - closes[0]) / closes[0]) * 100 : null;
   return (
     <div>
-      <div style={{ display: "flex", gap: 4, marginBottom: 8 }}>
+      <div style={{ display: "flex", gap: 4, marginBottom: 8, alignItems: "center" }}>
         {RANGES.map((r) => (
           <button key={r} type="button" onClick={() => setRange(r)}
             className={r === range ? "" : "secondary"} style={{ padding: "3px 11px", fontSize: 11 }}>{r}</button>
         ))}
+        {rangeChg != null && (
+          <span style={{ marginLeft: "auto", fontSize: 13, fontWeight: 700, fontVariantNumeric: "tabular-nums",
+            color: rangeChg >= 0 ? POS : NEG }}>
+            {rangeChg >= 0 ? "▲" : "▼"} {rangeChg >= 0 ? "+" : ""}{rangeChg.toFixed(2)}% <span className="muted" style={{ fontWeight: 400 }}>({range})</span>
+          </span>
+        )}
       </div>
       {closes === null ? (
         <div className="muted" style={{ fontSize: 12, padding: 40, textAlign: "center" }}>indlæser kurshistorik…</div>
