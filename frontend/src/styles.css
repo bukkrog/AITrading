@@ -1,14 +1,15 @@
 :root {
-  --bg: #0e1420;
-  --panel: #161f2e;
-  --panel-2: #1d2838;
-  --border: #263347;
-  --text: #e6edf6;
-  --muted: #8fa2ba;
-  --green: #3fb950;
+  /* Saxo TraderGO-style near-black terminal palette */
+  --bg: #090c12;
+  --panel: #0f141d;
+  --panel-2: #171e29;
+  --border: #202839;
+  --text: #dbe4f0;
+  --muted: #7e8ea6;
+  --green: #24c07a;
   --red: #f2545b;
   --amber: #e3a008;
-  --accent: #4c8dff;
+  --accent: #2f7ff6;
   color-scheme: dark;
 }
 
@@ -84,10 +85,13 @@ header.topbar h1 { font-size: 20px; margin: 0; }
 .card {
   background: var(--panel);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 6px;
   padding: 14px 16px;
 }
-.card h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 0 0 10px; }
+.card h2 {
+  font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted);
+  margin: -2px -16px 12px; padding: 0 16px 10px; border-bottom: 1px solid var(--border);
+}
 
 .metric .label { color: var(--muted); font-size: 12px; }
 .metric .value { font-size: 22px; font-weight: 600; margin-top: 4px; }
@@ -98,9 +102,12 @@ header.topbar h1 { font-size: 20px; margin: 0; }
 @media (max-width: 900px) { .two-col { grid-template-columns: 1fr; } }
 
 table { width: 100%; border-collapse: collapse; }
-th, td { text-align: right; padding: 6px 8px; border-bottom: 1px solid var(--border); font-variant-numeric: tabular-nums; }
+th, td { text-align: right; padding: 5px 10px; border-bottom: 1px solid var(--border); font-variant-numeric: tabular-nums; }
 th:first-child, td:first-child { text-align: left; }
-th { color: var(--muted); font-weight: 500; font-size: 12px; }
+thead th {
+  color: var(--muted); font-weight: 600; font-size: 10px; text-transform: uppercase; letter-spacing: .05em;
+  background: var(--panel-2); border-bottom: 1px solid var(--border); position: sticky; top: 0;
+}
 tbody tr:hover { background: var(--panel-2); }
 
 .tag { padding: 2px 8px; border-radius: 6px; font-size: 11px; font-weight: 600; }
@@ -112,7 +119,7 @@ tbody tr:hover { background: var(--panel-2); }
 label.field { color: var(--muted); font-size: 12px; }
 
 button {
-  background: var(--accent); color: white; border: none; border-radius: 8px;
+  background: var(--accent); color: white; border: none; border-radius: 5px;
   padding: 8px 14px; font-size: 13px; font-weight: 600; cursor: pointer;
 }
 button.secondary { background: var(--panel-2); border: 1px solid var(--border); color: var(--text); }
@@ -120,10 +127,11 @@ button.danger { background: var(--red); }
 button.warn { background: var(--amber); color: #201800; }
 button:disabled { opacity: .5; cursor: not-allowed; }
 
-select, input[type="text"] {
+select, input[type="text"], input[type="number"] {
   background: var(--panel-2); color: var(--text); border: 1px solid var(--border);
-  border-radius: 8px; padding: 7px 10px; font-size: 13px;
+  border-radius: 5px; padding: 7px 10px; font-size: 13px;
 }
+select:focus, input:focus { outline: none; border-color: var(--accent); }
 input[type="text"] { width: 100%; }
 
 .killbar {
