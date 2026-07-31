@@ -22,10 +22,51 @@ function Field({ label, children, hint }: { label: string; children: React.React
 
 function Toggle({ on, onChange, onLabel = "on", offLabel = "off" }: { on: boolean; onChange: (v: boolean) => void; onLabel?: string; offLabel?: string }) {
   return (
-    <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
-      <input type="checkbox" checked={on} onChange={(e) => onChange(e.target.checked)} />
-      <span>{on ? onLabel : offLabel}</span>
-    </label>
+    <button type="button" role="switch" aria-checked={on} onClick={() => onChange(!on)}
+      style={{ display: "inline-flex", alignItems: "center", gap: 9, background: "transparent", border: "none", padding: 0, cursor: "pointer", color: "inherit" }}>
+      <span style={{
+        width: 38, height: 22, borderRadius: 999, padding: 2, flexShrink: 0,
+        background: on ? "var(--accent)" : "var(--border)", transition: "background .2s",
+        display: "inline-flex", justifyContent: on ? "flex-end" : "flex-start",
+      }}>
+        <span style={{ width: 18, height: 18, borderRadius: "50%", background: "#fff", transition: "all .2s" }} />
+      </span>
+      <span style={{ fontSize: 13, color: on ? "var(--text)" : "var(--muted)" }}>{on ? onLabel : offLabel}</span>
+    </button>
+  );
+}
+
+/** Tech-style segmented control (replaces dropdowns for small option sets). */
+function Seg<T extends string | number>({ value, options, onChange }: { value: T; options: { v: T; label: string }[]; onChange: (v: T) => void }) {
+  return (
+    <div style={{ display: "inline-flex", gap: 3, background: "var(--border)", padding: 3, borderRadius: 7 }}>
+      {options.map((o) => (
+        <button key={String(o.v)} type="button" onClick={() => onChange(o.v)}
+          style={{
+            padding: "6px 13px", border: "none", borderRadius: 5, cursor: "pointer", fontSize: 13,
+            background: o.v === value ? "var(--accent)" : "transparent",
+            color: o.v === value ? "#fff" : "var(--muted)", fontWeight: o.v === value ? 600 : 500,
+            transition: "all .15s",
+          }}>
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** Collapsible titled section — tames the "wall of parameters" in Setup. */
+function Group({ title, children, defaultOpen = true }: { title: string; children: React.ReactNode; defaultOpen?: boolean }) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div style={{ border: "1px solid var(--border)", borderRadius: 6, marginBottom: 12, overflow: "hidden" }}>
+      <button type="button" onClick={() => setOpen(!open)}
+        style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", background: "var(--panel-2)", border: "none", padding: "9px 12px", cursor: "pointer", color: "var(--text)", fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".05em" }}>
+        <span>{title}</span>
+        <span style={{ color: "var(--muted)" }}>{open ? "▾" : "▸"}</span>
+      </button>
+      {open && <div style={{ padding: "12px 14px" }}>{children}</div>}
+    </div>
   );
 }
 
@@ -281,15 +322,15 @@ export function SettingsMenu({ onChanged, onToast }: { onChanged: () => void; on
         <div className="grid two-col">
           <div>
             <h3 style={{ fontSize: 13 }}>Broker</h3>
-            <Field label="Broker" hint="saxo = trades on your Saxo SIM account. simulation = internal paper broker.">
-              <select value={String(form.default_broker_mode)} onChange={(e) => set("default_broker_mode", e.target.value)}>
-                {opt.default_broker_mode.map((o) => <option key={o}>{o}</option>)}
-              </select>
+            <Field label="Broker" hint="saxo = handler på din Saxo SIM-konto. simulation = intern paper-broker.">
+              <Seg value={String(form.default_broker_mode)}
+                options={opt.default_broker_mode.map((o) => ({ v: o, label: o }))}
+                onChange={(v) => set("default_broker_mode", v)} />
             </Field>
-            <Field label="Saxo environment" hint="sim = simulated money (your DEMO app works ONLY here). live requires a Saxo-approved live app.">
-              <select value={String(form.saxo_environment)} onChange={(e) => set("saxo_environment", e.target.value)}>
-                {opt.saxo_environment.map((o) => <option key={o}>{o}</option>)}
-              </select>
+            <Field label="Saxo environment" hint="sim = simulerede penge (din DEMO-app virker KUN her). live kræver en Saxo-godkendt live-app.">
+              <Seg value={String(form.saxo_environment)}
+                options={opt.saxo_environment.map((o) => ({ v: o, label: o }))}
+                onChange={(v) => set("saxo_environment", v)} />
             </Field>
             <Field label="Live trading (REAL money)" hint="Leave OFF. SIM trades fully without it. Only for a documented, gated go-live.">
               <Toggle on={Boolean(form.live_trading_enabled)} onChange={(v) => set("live_trading_enabled", v)}
@@ -556,8 +597,7 @@ export function SettingsMenu({ onChanged, onToast }: { onChanged: () => void; on
                   onLabel="til — styres dynamisk af kapitalen" offLabel="fra — manuel styring" />
               </Field>
             </div>
-            <div style={{ marginTop: 10, paddingTop: 8, borderTop: "1px solid var(--border)" }}>
-              <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Sektor-risiko-gate (Risk Radar — handlende lag, opt-in)</div>
+            <Group title="Sektor-risiko, robusthed & alarmer (avanceret)" defaultOpen={false}>
               <Field label="Koncentrations-loft %" hint="0 = FRA. Når &gt;0: pauser NYE entries hvis porteføljens største sektor-beta (SPY/QQQ/SMH) allerede er ≥ dette (fx 150). Kun read-only radar kører når FRA. Kan kun pause — aldrig udvide.">
                 <input type="number" min="0" step="10" value={String(form.concentration_limit_pct ?? 0)}
                   onChange={(e) => set("concentration_limit_pct", Number(e.target.value))} style={{ maxWidth: 120 }} />
@@ -578,7 +618,7 @@ export function SettingsMenu({ onChanged, onToast }: { onChanged: () => void; on
                 <input type="text" value={String(form.alert_webhook_url ?? "")} placeholder="https://hooks.slack.com/…"
                   onChange={(e) => set("alert_webhook_url", e.target.value)} style={{ minWidth: 240 }} />
               </Field>
-            </div>
+            </Group>
             <table style={{ width: "100%", marginTop: 10, fontSize: 12 }}>
               <thead><tr><th style={{ textAlign: "left" }}>Indstilling</th><th>Anbefalet</th><th>Nu</th></tr></thead>
               <tbody>
