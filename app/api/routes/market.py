@@ -94,13 +94,19 @@ def history(symbol: str, range: str = "6M") -> dict:
     except Exception:
         yf_sym = sym
     closes: list[float] = []
+    dates: list[str] = []
+    # Intraday intervals carry a time-of-day; daily/weekly are date-only.
+    intraday = interval.endswith("m") or interval.endswith("h")
+    fmt = "%Y-%m-%d %H:%M" if intraday else "%Y-%m-%d"
     try:
         raw = yf.download(yf_sym, period=period, interval=interval, progress=False,
                           auto_adjust=True, timeout=30)
         close = raw["Close"] if "Close" in raw else raw
         if hasattr(close, "columns"):
             close = close.iloc[:, 0]
-        closes = [round(float(v), 4) for v in close.dropna().tolist()]
+        close = close.dropna()
+        closes = [round(float(v), 4) for v in close.tolist()]
+        dates = [d.strftime(fmt) for d in close.index]
     except Exception as exc:
         logger.warning("history %s (%s) failed: %s", sym, range, exc)
-    return {"symbol": sym, "range": range.upper(), "closes": closes}
+    return {"symbol": sym, "range": range.upper(), "closes": closes, "dates": dates}
