@@ -18,15 +18,18 @@ function Stat({ label, value, tone }: { label: string; value: string; tone?: str
   );
 }
 
-/** Simple SVG price line from the on-demand history endpoint. */
+const RANGES = ["1W", "1M", "6M", "YTD", "1Y", "5Y"];
+
+/** SVG price line with Saxo-style range selector (1W…5Y). */
 function PriceLine({ symbol }: { symbol: string }) {
+  const [range, setRange] = useState("6M");
   const [closes, setCloses] = useState<number[] | null>(null);
   useEffect(() => {
     let alive = true;
     setCloses(null);
-    api.positionHistory(symbol).then((r) => alive && setCloses(r.closes)).catch(() => alive && setCloses([]));
+    api.marketHistory(symbol, range).then((r) => alive && setCloses(r.closes)).catch(() => alive && setCloses([]));
     return () => { alive = false; };
-  }, [symbol]);
+  }, [symbol, range]);
   const path = useMemo(() => {
     if (!closes || closes.length < 2) return null;
     const W = 900, H = 220, pad = 8;
@@ -34,14 +37,29 @@ function PriceLine({ symbol }: { symbol: string }) {
     const x = (i: number) => pad + (i / (closes.length - 1)) * (W - 2 * pad);
     const y = (v: number) => pad + (1 - (v - min) / span) * (H - 2 * pad);
     const up = closes[closes.length - 1] >= closes[0];
-    return { d: closes.map((c, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(c).toFixed(1)}`).join(" "), up, W, H };
+    const line = closes.map((c, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(c).toFixed(1)}`).join(" ");
+    const area = `${line} L${x(closes.length - 1).toFixed(1)},${H - pad} L${x(0).toFixed(1)},${H - pad} Z`;
+    return { line, area, up, W, H };
   }, [closes]);
-  if (closes === null) return <div className="muted" style={{ fontSize: 12, padding: 40, textAlign: "center" }}>indlæser kurshistorik…</div>;
-  if (!path) return <div className="muted" style={{ fontSize: 12, padding: 40, textAlign: "center" }}>ingen kurshistorik for {symbol}</div>;
   return (
-    <svg viewBox={`0 0 ${path.W} ${path.H}`} width="100%" height={220} preserveAspectRatio="none">
-      <path d={path.d} fill="none" stroke={path.up ? POS : NEG} strokeWidth="1.6" />
-    </svg>
+    <div>
+      <div style={{ display: "flex", gap: 4, marginBottom: 8 }}>
+        {RANGES.map((r) => (
+          <button key={r} type="button" onClick={() => setRange(r)}
+            className={r === range ? "" : "secondary"} style={{ padding: "3px 11px", fontSize: 11 }}>{r}</button>
+        ))}
+      </div>
+      {closes === null ? (
+        <div className="muted" style={{ fontSize: 12, padding: 40, textAlign: "center" }}>indlæser kurshistorik…</div>
+      ) : !path ? (
+        <div className="muted" style={{ fontSize: 12, padding: 40, textAlign: "center" }}>ingen kurshistorik for {symbol}</div>
+      ) : (
+        <svg viewBox={`0 0 ${path.W} ${path.H}`} width="100%" height={220} preserveAspectRatio="none">
+          <path d={path.area} fill={path.up ? "rgba(36,192,122,.10)" : "rgba(242,84,91,.10)"} stroke="none" />
+          <path d={path.line} fill="none" stroke={path.up ? POS : NEG} strokeWidth="1.6" />
+        </svg>
+      )}
+    </div>
   );
 }
 

@@ -65,3 +65,42 @@ def indices() -> dict:
     data = {"indices": out}
     _CACHE.update(ts=now, data=data)
     return data
+
+
+# Chart ranges for the instrument page (Saxo-style 1W/1M/6M/YTD/1Y/5Y).
+_RANGES = {
+    "1W": ("5d", "30m"),
+    "1M": ("1mo", "1d"),
+    "6M": ("6mo", "1d"),
+    "YTD": ("ytd", "1d"),
+    "1Y": ("1y", "1d"),
+    "5Y": ("5y", "1wk"),
+}
+
+
+@router.get("/history")
+def history(symbol: str, range: str = "6M") -> dict:
+    """Close-price series for one instrument over a named range (for the chart)."""
+    import yfinance as yf
+
+    sym = (symbol or "").strip().upper()
+    period, interval = _RANGES.get(range.upper(), _RANGES["6M"])
+    yf_sym = sym
+    try:
+        from app.execution.saxo_symbols import saxo_to_yahoo
+
+        if ":" in sym:
+            yf_sym = saxo_to_yahoo(sym) or sym
+    except Exception:
+        yf_sym = sym
+    closes: list[float] = []
+    try:
+        raw = yf.download(yf_sym, period=period, interval=interval, progress=False,
+                          auto_adjust=True, timeout=30)
+        close = raw["Close"] if "Close" in raw else raw
+        if hasattr(close, "columns"):
+            close = close.iloc[:, 0]
+        closes = [round(float(v), 4) for v in close.dropna().tolist()]
+    except Exception as exc:
+        logger.warning("history %s (%s) failed: %s", sym, range, exc)
+    return {"symbol": sym, "range": range.upper(), "closes": closes}

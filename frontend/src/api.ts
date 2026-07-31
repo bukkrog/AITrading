@@ -176,6 +176,8 @@ export const api = {
       "/control/saxo/oauth-status",
     ),
   indices: () => get<{ indices: MarketIndex[] }>("/market/indices"),
+  marketHistory: (symbol: string, range: string) =>
+    get<{ symbol: string; range: string; closes: number[] }>(`/market/history?symbol=${encodeURIComponent(symbol)}&range=${range}`),
   assessment: () => get<{ assessments: PositionAssessment[]; exit_quant_floor: number }>("/portfolio/assessment"),
   costs: () => get<Costs>("/portfolio/costs"),
   concentration: () => get<Concentration>("/portfolio/concentration"),
