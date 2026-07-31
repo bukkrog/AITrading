@@ -295,12 +295,16 @@ export function SettingsMenu({ onChanged, onToast }: { onChanged: () => void; on
               <Toggle on={Boolean(form.live_trading_enabled)} onChange={(v) => set("live_trading_enabled", v)}
                 onLabel="ENABLED (real money armed!)" offLabel="off — SIM works fine" />
             </Field>
-            <Field label="Trading capital (allocation)" hint="Amount the platform trades with. Resets paper positions.">
-              <div className="btn-row">
-                <input type="text" value={allocation} onChange={(e) => setAllocationAmt(e.target.value)} style={{ maxWidth: 140 }} />
-                <button className="secondary" disabled={busy} onClick={setAlloc}>Set</button>
-              </div>
-            </Field>
+            {/* Paper-only: on Saxo the capital IS the live account balance, so this
+                field would be misleading. Only shown in simulation mode. */}
+            {String(form.default_broker_mode) === "simulation" && (
+              <Field label="Trading capital (paper)" hint="Kun i simulation: beløbet paper-brokeren handler med (nulstiller paper-positioner). På Saxo er kapitalen din live konto-saldo.">
+                <div className="btn-row">
+                  <input type="text" value={allocation} onChange={(e) => setAllocationAmt(e.target.value)} style={{ maxWidth: 140 }} />
+                  <button className="secondary" disabled={busy} onClick={setAlloc}>Set</button>
+                </div>
+              </Field>
+            )}
           </div>
           <div>
             <h3 style={{ fontSize: 13 }}>Saxo OAuth (recommended — one login, auto-renews)</h3>
@@ -512,14 +516,40 @@ export function SettingsMenu({ onChanged, onToast }: { onChanged: () => void; on
               <button disabled={busy} onClick={applySizing}>Anvend anbefalinger</button>
             </div>
             <div style={{ marginTop: 10, paddingTop: 8, borderTop: "1px solid var(--border)" }}>
-              <Field label="Risiko-appetit (1–5)" hint="Styrer hvor aggressivt auto-size handler: 1 = Meget forsigtig (0,5% risiko/handel, 40% eksponering, høj kostnads-tærskel = få handler) … 5 = Meget aggressiv (2%, 95%, lav tærskel = flere/større handler). Selv 5 er inden for sikre grænser — max 2% risiko, ingen gearing/short. Kapital-skaleringen (antal positioner efter kontostørrelse) bevares uanset trin.">
-                <select value={String(form.risk_appetite ?? 3)} onChange={(e) => set("risk_appetite", Number(e.target.value))}>
-                  <option value="1">1 — Meget forsigtig (0,5% · 40%)</option>
-                  <option value="2">2 — Forsigtig (0,75% · 60%)</option>
-                  <option value="3">3 — Balanceret (1% · 80%)</option>
-                  <option value="4">4 — Aggressiv (1,5% · 95%)</option>
-                  <option value="5">5 — Meget aggressiv (2% · 95%)</option>
-                </select>
+              <Field label="Risiko-appetit" hint="Styrer hvor aggressivt auto-size handler. Selv trin 5 er inden for sikre grænser — max 2% risiko/handel, ingen gearing/short. Kapital-skaleringen (antal positioner efter kontostørrelse) bevares uanset trin.">
+                {(() => {
+                  const AP = [
+                    { n: 1, name: "Meget forsigtig", sub: "0,5% · 40%", c: "#16a34a" },
+                    { n: 2, name: "Forsigtig", sub: "0,75% · 60%", c: "#65a30d" },
+                    { n: 3, name: "Balanceret", sub: "1% · 80%", c: "#f59e0b" },
+                    { n: 4, name: "Aggressiv", sub: "1,5% · 95%", c: "#f97316" },
+                    { n: 5, name: "Meget aggressiv", sub: "2% · 95%", c: "#dc2626" },
+                  ];
+                  const cur = Number(form.risk_appetite ?? 3);
+                  const act = AP.find((a) => a.n === cur) ?? AP[2];
+                  return (
+                    <div style={{ maxWidth: 340 }}>
+                      <div style={{ display: "flex", gap: 4, background: "var(--border)", padding: 4, borderRadius: 10 }}>
+                        {AP.map((a) => (
+                          <button key={a.n} type="button" title={a.name} onClick={() => set("risk_appetite", a.n)}
+                            style={{
+                              flex: 1, padding: "9px 4px", border: "none", borderRadius: 7, cursor: "pointer",
+                              background: a.n === cur ? a.c : "transparent",
+                              color: a.n === cur ? "#fff" : "var(--muted, #8b949e)",
+                              fontWeight: a.n === cur ? 700 : 500, fontSize: 14, fontVariantNumeric: "tabular-nums",
+                              boxShadow: a.n === cur ? `0 0 14px ${a.c}66` : "none", transition: "all .2s",
+                            }}>
+                            {a.n}
+                          </button>
+                        ))}
+                      </div>
+                      <div style={{ marginTop: 7, fontSize: 12 }}>
+                        <span style={{ color: act.c, fontWeight: 700 }}>{act.name}</span>
+                        <span className="muted"> · {act.sub}  (risiko/handel · maks eksponering)</span>
+                      </div>
+                    </div>
+                  );
+                })()}
               </Field>
               <Field label="Auto-size fra kapital" hint="Når slået TIL: platformen anvender selv disse anbefalinger hvert cyklus og skalerer positioner/størrelser op og ned, når kontoen ændrer sig. Appetit-trinnet ovenfor styrer HVOR aggressivt.">
                 <Toggle on={Boolean(form.auto_size_from_capital)} onChange={(v) => set("auto_size_from_capital", v)}

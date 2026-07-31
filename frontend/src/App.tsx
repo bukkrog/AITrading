@@ -119,7 +119,7 @@ export function App() {
   if (error && !portfolio) {
     return (
       <div className="app">
-        <h1>AI Trading Platform</h1>
+        <h1>BukTrader AI</h1>
         <div className="killbar">Cannot reach the API. Start it with <code>uvicorn app.main:app</code>.</div>
         <div className="error">{error}</div>
       </div>

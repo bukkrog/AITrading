@@ -52,7 +52,7 @@ export function Sidebar({ view, setView, monitoring, automation, alertsCount, on
   return (
     <aside className="sidebar">
       <div className="brand">
-        📈 AI Trading
+        📈 BukTrader AI
         <small>{a?.live_mode ? "LIVE mode" : "paper / sim"}</small>
       </div>
 
