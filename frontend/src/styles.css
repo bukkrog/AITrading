@@ -174,3 +174,35 @@ input[type="text"] { width: 100%; }
 .status-dot.stopped { background: var(--red); }
 .three-col { grid-template-columns: 1fr 1fr 1fr; }
 @media (max-width: 900px) { .three-col { grid-template-columns: 1fr; } }
+
+/* ---- Terminal top bar (DESIGN_trading_terminal_ui.md, step 1) ---- */
+.term-topbar {
+  position: sticky; top: 0; z-index: 50;
+  display: flex; align-items: center; gap: 18px;
+  height: 52px; padding: 0 16px;
+  background: linear-gradient(180deg, #0d121c, #0a0e16);
+  border-bottom: 1px solid var(--border);
+}
+.term-brand { font-weight: 800; font-size: 15px; letter-spacing: .2px; white-space: nowrap; }
+.term-search {
+  flex: 0 1 320px; background: var(--panel-2); border: 1px solid var(--border);
+  border-radius: 6px; padding: 7px 12px; font-size: 13px; color: var(--text);
+}
+.term-search:focus { outline: none; border-color: var(--accent); }
+.term-stats { display: flex; gap: 22px; margin-left: auto; align-items: center; }
+.term-right { display: flex; gap: 14px; align-items: center; }
+.term-acct { font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--border); white-space: nowrap; }
+.term-acct.saxo { color: var(--amber); border-color: color-mix(in srgb, var(--amber) 50%, transparent); }
+.term-acct.sim { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 50%, transparent); }
+.term-bell { position: relative; font-size: 16px; cursor: default; }
+.term-badge {
+  position: absolute; top: -6px; right: -8px; background: var(--red); color: #fff;
+  font-size: 9px; font-weight: 700; border-radius: 999px; padding: 0 4px; min-width: 14px; text-align: center;
+}
+/* keep the sticky sidebar below the top bar */
+.term-topbar + .layout .sidebar { top: 52px; height: calc(100vh - 52px); }
+@media (max-width: 760px) {
+  .term-topbar { flex-wrap: wrap; height: auto; padding: 8px 12px; gap: 10px; }
+  .term-search { flex-basis: 100%; order: 3; }
+  .term-stats { gap: 14px; }
+}

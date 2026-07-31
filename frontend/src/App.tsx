@@ -11,6 +11,7 @@ import { PositionChart } from "./components/PositionChart";
 import { IndicesBar } from "./components/IndicesBar";
 import { RiskRadar } from "./components/RiskRadar";
 import { CostCard } from "./components/CostCard";
+import { TopBar } from "./components/TopBar";
 import { SettingsMenu } from "./components/SettingsMenu";
 import { Sidebar, type View } from "./components/Sidebar";
 import type {
@@ -130,6 +131,8 @@ export function App() {
     .split(",").map((x) => x.trim().toUpperCase()).filter(Boolean);
 
   return (
+    <>
+    <TopBar />
     <div className="layout">
       <Sidebar
         view={view}
@@ -444,6 +447,7 @@ export function App() {
         {toast && <div className="toast">{toast}</div>}
       </div>
     </div>
+    </>
   );
 }
 
