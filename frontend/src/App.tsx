@@ -12,6 +12,7 @@ import { IndicesBar } from "./components/IndicesBar";
 import { RiskRadar } from "./components/RiskRadar";
 import { CostCard } from "./components/CostCard";
 import { TopBar } from "./components/TopBar";
+import { InstrumentPage } from "./components/InstrumentPage";
 import { SettingsMenu } from "./components/SettingsMenu";
 import { Sidebar, type View } from "./components/Sidebar";
 import type {
@@ -57,6 +58,7 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [view, setView] = useState<View>("dashboard");
+  const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null);
   const [oauth, setOauth] = useState<{ configured: boolean; connected: boolean; environment: string } | null>(null);
   const [activity, setActivity] = useState<{ current: { text: string; seconds_ago: number }; recent: { text: string; seconds_ago: number }[] } | null>(null);
   const [assessments, setAssessments] = useState<Record<string, PositionAssessment>>({});
@@ -132,7 +134,7 @@ export function App() {
 
   return (
     <>
-    <TopBar />
+    <TopBar onSearch={(s) => { setSelectedSymbol(s); setView("instrument"); }} />
     <div className="layout">
       <Sidebar
         view={view}
@@ -443,6 +445,11 @@ export function App() {
 
         {/* ---- Audit ---- */}
         {view === "audit" && <AuditLog audit={audit} />}
+
+        {/* ---- Instrument (search → analysis + manual buy) ---- */}
+        {view === "instrument" && selectedSymbol && (
+          <InstrumentPage symbol={selectedSymbol} onClose={() => setView("dashboard")} onTraded={refresh} />
+        )}
 
         {toast && <div className="toast">{toast}</div>}
       </div>

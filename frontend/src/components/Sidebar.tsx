@@ -2,7 +2,7 @@ import { useState } from "react";
 import { api } from "../api";
 import type { AutomationInfo, Monitoring } from "../types";
 
-export type View = "dashboard" | "trading" | "discovery" | "analytics" | "setup" | "audit";
+export type View = "dashboard" | "trading" | "discovery" | "analytics" | "setup" | "audit" | "instrument";
 
 const NAV: { id: View; label: string; icon: string }[] = [
   { id: "dashboard", label: "Dashboard", icon: "📊" },

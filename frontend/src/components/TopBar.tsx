@@ -14,11 +14,12 @@ function Stat({ label, value, tone }: { label: string; value: string; tone?: str
   );
 }
 
-export function TopBar() {
+export function TopBar({ onSearch }: { onSearch?: (symbol: string) => void }) {
   const [pf, setPf] = useState<Portfolio | null>(null);
   const [perf, setPerf] = useState<Performance | null>(null);
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [q, setQ] = useState("");
+  const submit = () => { const s = q.trim().toUpperCase(); if (s) onSearch?.(s); };
 
   useEffect(() => {
     let alive = true;
@@ -43,8 +44,12 @@ export function TopBar() {
     <header className="term-topbar">
       <div className="term-brand">📈 BukTrader&nbsp;AI</div>
 
-      <input className="term-search" value={q} onChange={(e) => setQ(e.target.value)}
-        placeholder="Søg instrument…  (fx AAPL, NVDA)" spellCheck={false} />
+      <div style={{ display: "flex", gap: 6, flex: "0 1 380px" }}>
+        <input className="term-search" value={q} onChange={(e) => setQ(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && submit()}
+          placeholder="Søg instrument…  (fx AAPL, NVDA) — Enter for analyse" spellCheck={false} style={{ flex: 1 }} />
+        <button onClick={submit} style={{ padding: "7px 14px" }}>Søg</button>
+      </div>
 
       <div className="term-stats">
         <Stat label="Equity" value={money(pf?.total_value)} />

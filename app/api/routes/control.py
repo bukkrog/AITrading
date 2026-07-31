@@ -137,6 +137,65 @@ def close_position(symbol: str, session: Session = Depends(get_session)) -> dict
     return {"closed": symbol, "quantity": pos.quantity, "price": round(price, 2)}
 
 
+@router.post("/manual-buy")
+def manual_buy(symbol: str, quantity: float, session: Session = Depends(get_session)) -> dict:
+    """Manually BUY a symbol. Bypasses the quant/news SIGNAL gates (the operator
+    is deciding), but STILL goes through the RISK ENGINE — kill switch, max
+    position %, total exposure, cash/no-leverage and the reduce-only guard are all
+    enforced. Per core principle #2 the risk engine can only shrink/reject, never
+    widen: the executed quantity is min(requested, risk-approved)."""
+    from app.core.enums import AuditCategory, OrderSide
+    from app.data.market_data import get_bars_df
+    from app.schemas.trading import TradeProposal
+    from app.services import audit_log_service
+    from app.services.strategy_engine import _latest_prices, build_pipeline
+
+    sym = (symbol or "").strip().upper()
+    if not sym:
+        raise HTTPException(status_code=400, detail="symbol required")
+    if quantity is None or quantity <= 0:
+        raise HTTPException(status_code=400, detail="quantity must be > 0")
+
+    pipe = build_pipeline(session)
+    prices = _latest_prices(session, [sym])
+    price = prices.get(sym) or 0.0
+    if not price:
+        df = get_bars_df(session, sym)
+        price = float(df["close"].iloc[-1]) if len(df) else 0.0
+        if price:
+            prices[sym] = price
+    if not price:
+        raise HTTPException(status_code=404, detail=f"No price for '{sym}'. Try a known ticker.")
+
+    assessment = pipe.risk_agent.assess(
+        sym, OrderSide.BUY, price, prices, requested_quantity=float(quantity)
+    )
+    if not assessment.approved or assessment.approved_quantity <= 0:
+        return {"placed": False, "symbol": sym, "requested": float(quantity),
+                "reasons": assessment.reasons}
+    qty = min(float(quantity), float(assessment.approved_quantity))
+    try:
+        pipe.execution_agent.execute(TradeProposal(
+            symbol=sym, side=OrderSide.BUY, quantity=qty,
+            reference_price=price, stop_price=assessment.stop_price,
+        ))
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)[:200]) from exc
+    try:
+        engine = PortfolioEngine(session)
+        engine.invalidate_saxo_cache()
+    except Exception:
+        pass
+    audit_log_service.record(
+        session, AuditCategory.ORDER, "manual_buy", symbol=sym,
+        message=f"Manual BUY {qty:g} {sym} @ {price:.2f} (requested {quantity:g}).",
+    )
+    session.commit()
+    return {"placed": True, "symbol": sym, "quantity": qty, "requested": float(quantity),
+            "price": round(price, 4), "stop_price": assessment.stop_price,
+            "capped": qty < float(quantity), "reasons": assessment.reasons}
+
+
 @router.post("/allocation")
 def set_allocation(
     amount: float, reset_positions: bool = True, session: Session = Depends(get_session)

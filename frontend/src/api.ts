@@ -113,6 +113,9 @@ export const api = {
       dollar_volume?: number; next_earnings?: string; long_count?: number;
       signals?: { strategy: string; long: boolean; fresh: string }[];
     }>(`/backtest/analyze?symbol=${encodeURIComponent(symbol)}`),
+  manualBuy: (symbol: string, quantity: number) =>
+    post<{ placed: boolean; symbol: string; quantity?: number; requested: number; price?: number; stop_price?: number | null; capped?: boolean; reasons: string[] }>(
+      `/control/manual-buy?symbol=${encodeURIComponent(symbol)}&quantity=${quantity}`),
   tradeLog: (limit = 80) =>
     get<{ ts: string; symbol: string; side: string; quantity: number; price: number; value: number; commission: number; reason: string }[]>(
       `/trades/log?limit=${limit}`,
