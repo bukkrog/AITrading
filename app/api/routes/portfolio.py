@@ -530,7 +530,15 @@ def costs(session: Session = Depends(get_session)) -> dict:
     except Exception:
         return {"error": "data unavailable", "currency": base_ccy}
     realized = float(realized_by_symbol(session).get("total") or 0.0)
-    baseline = float(getattr(engine.account, "peak_value", 0.0) or equity)
+    # Baseline = the account's STARTING equity (earliest recorded snapshot), NOT
+    # peak_value. peak_value is an all-time-high water-mark, so once the account
+    # has ever been in profit it overstates cost and mislabels drawdown-from-peak
+    # as net P&L. Earliest snapshot ≈ starting capital (assumes no deposits since).
+    first = session.scalar(
+        select(PortfolioSnapshot).order_by(PortfolioSnapshot.ts.asc()).limit(1)
+    )
+    baseline = float(first.total_value) if first and first.total_value else float(
+        getattr(engine.account, "peak_value", 0.0) or equity)
     est_cost = round(baseline + realized + unrealized - equity, 2)
     net = round(equity - baseline, 2)
     return {
@@ -543,5 +551,5 @@ def costs(session: Session = Depends(get_session)) -> dict:
         "estimated_cost": est_cost,
         # of a net LOSS, how much is cost rather than bad trades:
         "cost_share_of_loss_pct": round(est_cost / abs(net) * 100, 0) if (net < 0 and est_cost > 0) else None,
-        "note": "Estimeret (kurtage+FX+spread). Antager ingen ind-/udbetalinger; baseline = peak/startkapital.",
+        "note": "Estimeret (kurtage+FX+spread). Baseline = tidligste registrerede equity (startkapital); antager ingen ind-/udbetalinger siden.",
     }

@@ -58,7 +58,7 @@ export function RiskRadar() {
 
         {/* ---- Concentration ---- */}
         <Card title="Sektor-koncentration">
-          {conc && conc.n_holdings > 0 ? (
+          {conc && conc.proxies.length > 0 ? (
             <>
               <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 8 }}>
                 <span style={{ fontSize: 26, fontWeight: 800, color: sectorColor(conc.concentration_pct) }}>
@@ -86,6 +86,8 @@ export function RiskRadar() {
                 })}
               </div>
             </>
+          ) : conc && conc.n_holdings > 0 ? (
+            <p className="muted" style={{ fontSize: 12 }}>Sektor-data utilgængelig lige nu (yfinance) — ikke et "alt-klart".</p>
           ) : <p className="muted" style={{ fontSize: 12 }}>Ingen åbne positioner.</p>}
         </Card>
 

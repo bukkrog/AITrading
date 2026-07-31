@@ -80,8 +80,12 @@ def radar(concentration_result: dict, days: int = 7) -> dict:
     exposed = _exposed_proxies(concentration_result)
     if not exposed:
         return {"bellwethers": [], "note": "Ingen betydelig sektor-eksponering — ingen bellwethers at overvåge."}
+    # Cache key includes the window + the exposed set — otherwise the gate call
+    # (days=event_veto_days) and the /bellwether-risk call (days=7) would share
+    # one cached result and read imminent-flags computed for the wrong window.
+    key = (int(days), tuple(sorted(exposed)))
     now = time.monotonic()
-    if _CACHE["result"] is not None and (now - _CACHE["ts"]) < _TTL:
+    if _CACHE.get("key") == key and _CACHE["result"] is not None and (now - _CACHE["ts"]) < _TTL:
         return _CACHE["result"]
     tickers = sorted({t for px in exposed for t in _BELLWETHERS.get(px, [])})
     earnings: dict = {}
@@ -96,5 +100,5 @@ def radar(concentration_result: dict, days: int = 7) -> dict:
         news[t] = _news_score(t)
     res = assess(exposed, earnings, news, days, date.today())
     res["watched"] = tickers
-    _CACHE.update(ts=now, result=res)
+    _CACHE.update(ts=now, result=res, key=key)
     return res
