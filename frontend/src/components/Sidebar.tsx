@@ -6,20 +6,22 @@ export type View =
   | "dashboard" | "markets" | "portfolio" | "orders" | "history" | "signals" | "news"
   | "trading" | "discovery" | "analytics" | "setup" | "audit" | "instrument";
 
-const NAV: { id: View; label: string; icon: string; group?: string }[] = [
-  { id: "dashboard", label: "Dashboard", icon: "📊" },
-  { id: "markets", label: "Markets", icon: "🌐" },
-  { id: "discovery", label: "Watchlists", icon: "⭐" },
-  { id: "portfolio", label: "Portfolio", icon: "💼" },
-  { id: "orders", label: "Orders", icon: "📋" },
-  { id: "history", label: "History", icon: "🕑" },
-  { id: "signals", label: "AI Signals", icon: "🧠" },
-  { id: "news", label: "News", icon: "📰" },
-  { id: "trading", label: "Auto Trading", icon: "🤖" },
-  { id: "analytics", label: "Analytics", icon: "📈" },
-  { id: "setup", label: "Settings", icon: "⚙" },
-  { id: "audit", label: "Audit log", icon: "📜" },
+const NAV: { id: View; label: string; icon: string; group: string }[] = [
+  { id: "dashboard", label: "Dashboard", icon: "📊", group: "Oversigt" },
+  { id: "markets", label: "Markets", icon: "🌐", group: "Oversigt" },
+  { id: "discovery", label: "Watchlists", icon: "⭐", group: "Oversigt" },
+  { id: "news", label: "News", icon: "📰", group: "Oversigt" },
+  { id: "portfolio", label: "Portfolio", icon: "💼", group: "Konto" },
+  { id: "orders", label: "Orders", icon: "📋", group: "Konto" },
+  { id: "history", label: "History", icon: "🕑", group: "Konto" },
+  { id: "signals", label: "AI Signals", icon: "🧠", group: "Konto" },
+  { id: "trading", label: "Auto Trading", icon: "🤖", group: "System" },
+  { id: "analytics", label: "Analytics", icon: "📈", group: "System" },
+  { id: "setup", label: "Settings", icon: "⚙", group: "System" },
+  { id: "audit", label: "Audit log", icon: "📜", group: "System" },
 ];
+
+const GROUPS = ["Oversigt", "Konto", "System"];
 
 interface Props {
   view: View;
@@ -64,16 +66,21 @@ export function Sidebar({ view, setView, monitoring, automation, alertsCount, on
         <small>{a?.live_mode ? "LIVE mode" : "paper / sim"}</small>
       </div>
 
-      {NAV.map((n) => (
-        <button
-          key={n.id}
-          className={`navitem ${view === n.id ? "active" : ""}`}
-          onClick={() => setView(n.id)}
-        >
-          <span>{n.icon}</span>
-          <span>{n.label}</span>
-          {n.id === "trading" && alertsCount > 0 && <span className="count">{alertsCount}</span>}
-        </button>
+      {GROUPS.map((g) => (
+        <div key={g} className="nav-group">
+          <div className="nav-group-label">{g}</div>
+          {NAV.filter((n) => n.group === g).map((n) => (
+            <button
+              key={n.id}
+              className={`navitem ${view === n.id ? "active" : ""}`}
+              onClick={() => setView(n.id)}
+            >
+              <span>{n.icon}</span>
+              <span>{n.label}</span>
+              {n.id === "trading" && alertsCount > 0 && <span className="count">{alertsCount}</span>}
+            </button>
+          ))}
+        </div>
       ))}
 
       <div className="nav-spacer" />
