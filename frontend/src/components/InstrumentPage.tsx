@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../api";
+import { PortfolioView, OrdersView, HistoryView, SignalsView } from "./TerminalViews";
 
 type Analysis = Awaited<ReturnType<typeof api.analyzeStock>>;
 
@@ -63,8 +64,29 @@ function PriceLine({ symbol }: { symbol: string }) {
   );
 }
 
+const WS_TABS = ["Positioner", "Ordrer", "Historik", "AI-signaler"] as const;
+
+/** Bottom terminal workspace — tabbed Positions / Orders / History / Signals. */
+function WorkspaceTabs({ onOpen, onToast }: { onOpen?: (s: string) => void; onToast?: (m: string) => void }) {
+  const [tab, setTab] = useState<(typeof WS_TABS)[number]>("Positioner");
+  return (
+    <div className="card" style={{ marginTop: 14 }}>
+      <div style={{ display: "flex", gap: 4, marginBottom: 10, borderBottom: "1px solid var(--border)", paddingBottom: 8 }}>
+        {WS_TABS.map((t) => (
+          <button key={t} type="button" onClick={() => setTab(t)}
+            className={t === tab ? "" : "secondary"} style={{ padding: "4px 12px", fontSize: 12 }}>{t}</button>
+        ))}
+      </div>
+      {tab === "Positioner" && <PortfolioView onOpen={onOpen} />}
+      {tab === "Ordrer" && <OrdersView onToast={onToast} />}
+      {tab === "Historik" && <HistoryView />}
+      {tab === "AI-signaler" && <SignalsView onOpen={onOpen} />}
+    </div>
+  );
+}
+
 /** Center analysis page for a single instrument + a risk-checked manual BUY ticket. */
-export function InstrumentPage({ symbol, onClose, onTraded }: { symbol: string; onClose?: () => void; onTraded?: () => void }) {
+export function InstrumentPage({ symbol, onClose, onTraded, onOpen, onToast }: { symbol: string; onClose?: () => void; onTraded?: () => void; onOpen?: (s: string) => void; onToast?: (m: string) => void }) {
   const [a, setA] = useState<Analysis | null>(null);
   const [qty, setQty] = useState("1");
   const [busy, setBusy] = useState(false);
@@ -97,6 +119,7 @@ export function InstrumentPage({ symbol, onClose, onTraded }: { symbol: string; 
   const estCost = a?.price ? Number(qty) * a.price : null;
 
   return (
+    <>
     <div style={{ display: "grid", gridTemplateColumns: "1fr 320px", gap: 16, alignItems: "start" }}>
       {/* ---- Center: chart + analysis ---- */}
       <div style={{ display: "flex", flexDirection: "column", gap: 14, minWidth: 0 }}>
@@ -159,5 +182,7 @@ export function InstrumentPage({ symbol, onClose, onTraded }: { symbol: string; 
         {result && <div style={{ fontSize: 12, marginTop: 10, lineHeight: 1.5 }}>{result}</div>}
       </div>
     </div>
+    <WorkspaceTabs onOpen={onOpen} onToast={onToast} />
+    </>
   );
 }

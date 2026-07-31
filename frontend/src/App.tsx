@@ -13,6 +13,7 @@ import { RiskRadar } from "./components/RiskRadar";
 import { CostCard } from "./components/CostCard";
 import { TopBar } from "./components/TopBar";
 import { InstrumentPage } from "./components/InstrumentPage";
+import { MarketsView, PortfolioView, OrdersView, HistoryView, SignalsView, NewsView } from "./components/TerminalViews";
 import { SettingsMenu } from "./components/SettingsMenu";
 import { Sidebar, type View } from "./components/Sidebar";
 import type {
@@ -112,6 +113,8 @@ export function App() {
     setTimeout(() => setToast(null), 4000);
   };
 
+  const openInstrument = (s: string) => { setSelectedSymbol(s); setView("instrument"); };
+
   const closePosition = (symbol: string) => {
     if (!window.confirm(`Sell the entire ${symbol} position at market?`)) return;
     api.closePosition(symbol)
@@ -134,7 +137,7 @@ export function App() {
 
   return (
     <>
-    <TopBar onSearch={(s) => { setSelectedSymbol(s); setView("instrument"); }} />
+    <TopBar onSearch={openInstrument} />
     <div className="layout">
       <Sidebar
         view={view}
@@ -150,7 +153,10 @@ export function App() {
         <header className="topbar">
           <div>
             <h1 style={{ margin: 0, fontSize: 20, textTransform: "capitalize" }}>
-              {view === "trading" ? "Auto Trading" : view === "audit" ? "Audit log" : view}
+              {view === "trading" ? "Auto Trading" : view === "audit" ? "Audit log"
+                : view === "discovery" ? "Watchlists" : view === "signals" ? "AI Signals"
+                : view === "setup" ? "Settings" : view === "instrument" ? (selectedSymbol ?? "Instrument")
+                : view}
             </h1>
             <div className="subtitle">Controlled · paper-first · Saxo-targeted</div>
           </div>
@@ -434,7 +440,25 @@ export function App() {
           </>
         )}
 
-        {/* ---- Discovery (live market scan) ---- */}
+        {/* ---- Markets (indices + screener) ---- */}
+        {view === "markets" && <MarketsView onOpen={openInstrument} />}
+
+        {/* ---- Portfolio ---- */}
+        {view === "portfolio" && <PortfolioView onOpen={openInstrument} />}
+
+        {/* ---- Orders (pending broker orders) ---- */}
+        {view === "orders" && <OrdersView onToast={showToast} />}
+
+        {/* ---- History (executed trades) ---- */}
+        {view === "history" && <HistoryView />}
+
+        {/* ---- AI Signals ---- */}
+        {view === "signals" && <SignalsView onOpen={openInstrument} />}
+
+        {/* ---- News ---- */}
+        {view === "news" && <NewsView />}
+
+        {/* ---- Discovery / Watchlists (live market scan) ---- */}
         {view === "discovery" && <DiscoveryView />}
 
         {/* ---- Analytics ---- */}
@@ -448,7 +472,7 @@ export function App() {
 
         {/* ---- Instrument (search → analysis + manual buy) ---- */}
         {view === "instrument" && selectedSymbol && (
-          <InstrumentPage symbol={selectedSymbol} onClose={() => setView("dashboard")} onTraded={refresh} />
+          <InstrumentPage symbol={selectedSymbol} onClose={() => setView("dashboard")} onTraded={refresh} onOpen={openInstrument} onToast={showToast} />
         )}
 
         {toast && <div className="toast">{toast}</div>}

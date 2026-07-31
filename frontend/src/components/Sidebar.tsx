@@ -2,14 +2,22 @@ import { useState } from "react";
 import { api } from "../api";
 import type { AutomationInfo, Monitoring } from "../types";
 
-export type View = "dashboard" | "trading" | "discovery" | "analytics" | "setup" | "audit" | "instrument";
+export type View =
+  | "dashboard" | "markets" | "portfolio" | "orders" | "history" | "signals" | "news"
+  | "trading" | "discovery" | "analytics" | "setup" | "audit" | "instrument";
 
-const NAV: { id: View; label: string; icon: string }[] = [
+const NAV: { id: View; label: string; icon: string; group?: string }[] = [
   { id: "dashboard", label: "Dashboard", icon: "📊" },
+  { id: "markets", label: "Markets", icon: "🌐" },
+  { id: "discovery", label: "Watchlists", icon: "⭐" },
+  { id: "portfolio", label: "Portfolio", icon: "💼" },
+  { id: "orders", label: "Orders", icon: "📋" },
+  { id: "history", label: "History", icon: "🕑" },
+  { id: "signals", label: "AI Signals", icon: "🧠" },
+  { id: "news", label: "News", icon: "📰" },
   { id: "trading", label: "Auto Trading", icon: "🤖" },
-  { id: "discovery", label: "Discovery", icon: "🔭" },
   { id: "analytics", label: "Analytics", icon: "📈" },
-  { id: "setup", label: "Setup", icon: "⚙" },
+  { id: "setup", label: "Settings", icon: "⚙" },
   { id: "audit", label: "Audit log", icon: "📜" },
 ];
 
