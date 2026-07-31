@@ -91,6 +91,8 @@ export function InstrumentPage({ symbol, onClose, onTraded, onOpen, onToast }: {
   const [qty, setQty] = useState("1");
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<string | null>(null);
+  const [riskDkk, setRiskDkk] = useState("500");
+  const [stopPct, setStopPct] = useState("8");
 
   useEffect(() => {
     let alive = true;
@@ -117,6 +119,10 @@ export function InstrumentPage({ symbol, onClose, onTraded, onOpen, onToast }: {
   };
 
   const estCost = a?.price ? Number(qty) * a.price : null;
+  const stopPrice = a?.price && Number(stopPct) > 0 ? a.price * (1 - Number(stopPct) / 100) : null;
+  const suggestedQty = a?.price && Number(stopPct) > 0 && Number(riskDkk) > 0
+    ? Math.max(1, Math.floor(Number(riskDkk) / (a.price * (Number(stopPct) / 100))))
+    : null;
 
   return (
     <>
@@ -175,6 +181,31 @@ export function InstrumentPage({ symbol, onClose, onTraded, onOpen, onToast }: {
           Est. værdi: <span style={{ color: "var(--text)", fontVariantNumeric: "tabular-nums" }}>{estCost == null ? "—" : num(estCost, 0)}</span>
           {a?.price != null && ` @ ${num(a.price)}/stk`}
         </div>
+        {/* ---- Positions-beregner (risiko → antal) ---- */}
+        <div style={{ borderTop: "1px solid var(--border)", paddingTop: 10, marginBottom: 12 }}>
+          <div className="muted" style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 6 }}>Positions-beregner</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+            <div>
+              <label className="field" style={{ fontSize: 11 }}>Risiko (DKK)</label>
+              <input type="number" min="0" step="50" value={riskDkk} onChange={(e) => setRiskDkk(e.target.value)} style={{ width: "100%", margin: "3px 0 0" }} />
+            </div>
+            <div>
+              <label className="field" style={{ fontSize: 11 }}>Stop %</label>
+              <input type="number" min="0" step="0.5" value={stopPct} onChange={(e) => setStopPct(e.target.value)} style={{ width: "100%", margin: "3px 0 0" }} />
+            </div>
+          </div>
+          <div style={{ fontSize: 12, marginTop: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }} className="muted">
+            <span>Forslag: <span style={{ color: "var(--text)", fontWeight: 700 }}>{suggestedQty ?? "—"} stk</span>
+              {stopPrice != null && <> · stop ≈ {num(stopPrice)}</>}</span>
+            {suggestedQty != null && (
+              <button className="secondary" style={{ padding: "2px 9px", fontSize: 11 }} onClick={() => setQty(String(suggestedQty))}>Brug</button>
+            )}
+          </div>
+          <div className="muted" style={{ fontSize: 10, marginTop: 4, lineHeight: 1.4 }}>
+            Vejledende — risk-motoren fastsætter det endelige stop og kan afkorte antallet.
+          </div>
+        </div>
+
         <button onClick={buy} disabled={busy || !a || !!a.error}
           style={{ width: "100%", background: POS, fontSize: 15, padding: "11px 0" }}>
           {busy ? "Køber…" : `KØB ${symbol}`}
