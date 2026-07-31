@@ -26,7 +26,25 @@ _PROXIES: list[tuple[str, str, bool]] = [
 _SECTOR_WARN_PCT = 80.0  # value-weighted sector beta at/above this -> concentration warning
 
 _CACHE: dict = {"ts": 0.0, "key": None, "result": None}
-_TTL = 600.0  # 10 min — matches discovery; concentration doesn't move fast
+_TTL = 600.0
+
+
+def yf_symbol(s: str) -> str:
+    """Map a Saxo display symbol to its yfinance ticker. `NOVOb:xcse` -> `NOVO-B.CO`;
+    a plain/US ticker passes through. WITHOUT this an EU holding resolves to a
+    bogus base (`NOVOB`), gets no returns, yet stays in the weight denominator —
+    silently diluting the concentration reading the gate depends on."""
+    s = str(s)
+    if ":" in s:
+        try:
+            from app.execution.saxo_symbols import saxo_to_yahoo
+
+            m = saxo_to_yahoo(s)
+            if m:
+                return m
+        except Exception:
+            pass
+    return s.split(":")[0].upper()  # 10 min — matches discovery; concentration doesn't move fast
 
 
 def compute_concentration(holdings: list[tuple[str, float]], returns_map: dict) -> dict:
@@ -57,6 +75,10 @@ def compute_concentration(holdings: list[tuple[str, float]], returns_map: dict) 
             if var == 0:
                 continue
             beta = float(a.cov(b)) / var
+            import math
+
+            if not math.isfinite(beta):  # guard inf/NaN (e.g. a zero-price bar)
+                continue
             w = mv / total
             exp_beta += w * beta
             covered += w
@@ -102,7 +124,10 @@ def _fetch_returns(symbols: list[str]) -> dict:
                 ser = close.dropna()  # single-symbol frame is a Series
             if len(ser) < 40:
                 continue
-            out[s] = ser.pct_change().dropna()
+            import numpy as _np
+
+            r = ser.pct_change().replace([_np.inf, -_np.inf], _np.nan).dropna()
+            out[s] = r
         except Exception:  # one bad symbol must not sink the radar
             continue
     return out
@@ -125,7 +150,7 @@ def sector_risk_block(holdings_dicts: list[dict]) -> str | None:
     if settings.bellwether_freeze:
         from app.services import bellwether
 
-        rad = bellwether.radar(conc)
+        rad = bellwether.radar(conc, days=settings.event_veto_days)
         imminent = [b for b in rad.get("bellwethers", []) if b.get("imminent")]
         if imminent:
             names = ", ".join(b["symbol"] for b in imminent[:3])
@@ -136,7 +161,7 @@ def sector_risk_block(holdings_dicts: list[dict]) -> str | None:
 
 def concentration(holdings_dicts: list[dict]) -> dict:
     """Public entry: [{symbol, market_value}] -> concentration report (cached)."""
-    holdings = [(str(h["symbol"]).split(":")[0].upper(), float(h["market_value"]))
+    holdings = [(yf_symbol(h["symbol"]), float(h["market_value"]))
                 for h in holdings_dicts if h.get("market_value")]
     if not holdings:
         return {"proxies": [], "concentration_pct": 0.0, "n_holdings": 0, "warning": None}

@@ -945,3 +945,14 @@ def test_event_veto_fail_closed(monkeypatch):
     monkeypatch.setattr(settings, "event_veto_fail_closed", True)
     v = event_risk.check("TEST")
     assert v and v["type"] == "lookup_failed"
+
+
+def test_exposure_yf_symbol_maps_eu_tickers():
+    from app.services.exposure_risk import yf_symbol
+    # US / plain pass through (uppercased base).
+    assert yf_symbol("AAPL") == "AAPL"
+    assert yf_symbol("NU:xnys") == "NU"
+    # A Copenhagen Saxo symbol must map to a Yahoo .CO ticker, not a bogus base
+    # (otherwise it gets no returns yet stays in the concentration denominator).
+    mapped = yf_symbol("NOVOb:xcse")
+    assert mapped.endswith(".CO") and "NOVO" in mapped.upper()

@@ -47,6 +47,10 @@ def stress(holdings: list[tuple[str, float]], returns_map: dict) -> dict:
             if var == 0:
                 continue
             beta = float(a.cov(b)) / var
+            import math
+
+            if not math.isfinite(beta):
+                continue
             pnl += mv * beta * shock
             covered += mv / total
         out.append({
@@ -58,11 +62,16 @@ def stress(holdings: list[tuple[str, float]], returns_map: dict) -> dict:
 
 
 def scenario(holdings_dicts: list[dict]) -> dict:
-    holdings = [(str(h["symbol"]).split(":")[0].upper(), float(h["market_value"]))
+    from app.services.exposure_risk import yf_symbol
+
+    holdings = [(yf_symbol(h["symbol"]), float(h["market_value"]))
                 for h in holdings_dicts if h.get("market_value")]
     if not holdings:
         return {"scenarios": [], "n_holdings": 0}
-    key = tuple(sorted((s, round(mv)) for s, mv in holdings))
+    # Key on SYMBOLS only (not rounded market value) — an mv that ticks across an
+    # integer boundary each poll during market hours would otherwise miss the
+    # cache every time and hammer yfinance.
+    key = tuple(sorted(s for s, _ in holdings))
     now = time.monotonic()
     if _CACHE["key"] == key and (now - _CACHE["ts"]) < _TTL and _CACHE["result"]:
         return _CACHE["result"]
