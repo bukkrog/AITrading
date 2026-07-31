@@ -301,6 +301,23 @@ class SaxoBrokerAdapter(BrokerAdapter):
         last = (rows[0] or {}).get("LastTraded") if rows else None
         return float(last) if last else None
 
+    def top_of_book(self, symbol: str) -> dict | None:
+        """Level-1 quote {bid, ask, mid, bid_size, ask_size} via infoprices."""
+        uic = self.resolve_uic(symbol)
+        account_key, _ = self._ensure_account()
+        data = self._get(
+            "/trade/v1/infoprices",
+            {"Uic": uic, "AssetType": "Stock", "AccountKey": account_key},
+        )
+        rows = data.get("Data") or [data]
+        q = (rows[0] or {}).get("Quote", {}) if rows else {}
+        bid = float(q["Bid"]) if q.get("Bid") else None
+        ask = float(q["Ask"]) if q.get("Ask") else None
+        mid = float(q["Mid"]) if q.get("Mid") else (
+            (bid + ask) / 2.0 if bid and ask else None)
+        return {"bid": bid, "ask": ask, "mid": mid,
+                "bid_size": q.get("BidSize"), "ask_size": q.get("AskSize")}
+
     def bars(self, symbol: str, days: int = 365, horizon: int | None = None):
         """Return OHLCV bars for ``symbol`` from Saxo's chart service.
 

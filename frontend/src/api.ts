@@ -116,6 +116,12 @@ export const api = {
   manualBuy: (symbol: string, quantity: number) =>
     post<{ placed: boolean; symbol: string; quantity?: number; requested: number; price?: number; stop_price?: number | null; capped?: boolean; reasons: string[] }>(
       `/control/manual-buy?symbol=${encodeURIComponent(symbol)}&quantity=${quantity}`),
+  manualSell: (symbol: string, quantity: number) =>
+    post<{ placed?: boolean; closed?: string; symbol?: string; quantity?: number; requested?: number; price?: number; capped?: boolean }>(
+      `/control/manual-sell?symbol=${encodeURIComponent(symbol)}&quantity=${quantity}`),
+  marketQuote: (symbol: string) =>
+    get<{ symbol: string; source: string; bid: number | null; ask: number | null; mid: number | null; spread: number | null; bid_size?: number | null; ask_size?: number | null }>(
+      `/market/quote?symbol=${encodeURIComponent(symbol)}`),
   tradeLog: (limit = 80) =>
     get<{ ts: string; symbol: string; side: string; quantity: number; price: number; value: number; commission: number; reason: string }[]>(
       `/trades/log?limit=${limit}`,
@@ -177,7 +183,7 @@ export const api = {
     ),
   indices: () => get<{ indices: MarketIndex[] }>("/market/indices"),
   marketHistory: (symbol: string, range: string) =>
-    get<{ symbol: string; range: string; closes: number[]; dates: string[] }>(`/market/history?symbol=${encodeURIComponent(symbol)}&range=${range}`),
+    get<{ symbol: string; range: string; closes: number[]; dates: string[]; intraday: boolean; bars: { t: number | string; o: number; h: number; l: number; c: number }[] }>(`/market/history?symbol=${encodeURIComponent(symbol)}&range=${range}`),
   assessment: () => get<{ assessments: PositionAssessment[]; exit_quant_floor: number }>("/portfolio/assessment"),
   costs: () => get<Costs>("/portfolio/costs"),
   concentration: () => get<Concentration>("/portfolio/concentration"),

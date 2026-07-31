@@ -78,35 +78,109 @@ _RANGES = {
 }
 
 
-@router.get("/history")
-def history(symbol: str, range: str = "6M") -> dict:
-    """Close-price series for one instrument over a named range (for the chart)."""
-    import yfinance as yf
-
-    sym = (symbol or "").strip().upper()
-    period, interval = _RANGES.get(range.upper(), _RANGES["6M"])
-    yf_sym = sym
+def _yf_symbol(sym: str) -> str:
     try:
         from app.execution.saxo_symbols import saxo_to_yahoo
 
         if ":" in sym:
-            yf_sym = saxo_to_yahoo(sym) or sym
+            return saxo_to_yahoo(sym) or sym
     except Exception:
-        yf_sym = sym
+        pass
+    return sym
+
+
+@router.get("/history")
+def history(symbol: str, range: str = "6M") -> dict:
+    """OHLC + close series for one instrument over a named range (chart)."""
+    import yfinance as yf
+
+    sym = (symbol or "").strip().upper()
+    period, interval = _RANGES.get(range.upper(), _RANGES["6M"])
+    yf_sym = _yf_symbol(sym)
     closes: list[float] = []
     dates: list[str] = []
-    # Intraday intervals carry a time-of-day; daily/weekly are date-only.
+    bars: list[dict] = []
+    # Intraday intervals carry a time-of-day; daily/weekly are date-only. Lightweight
+    # charts wants UNIX seconds for intraday and "YYYY-MM-DD" for daily bars.
     intraday = interval.endswith("m") or interval.endswith("h")
     fmt = "%Y-%m-%d %H:%M" if intraday else "%Y-%m-%d"
     try:
         raw = yf.download(yf_sym, period=period, interval=interval, progress=False,
                           auto_adjust=True, timeout=30)
+
+        def _col(name: str):
+            if name not in raw:
+                return None
+            c = raw[name]
+            return c.iloc[:, 0] if hasattr(c, "columns") else c
+
+        close = _col("Close")
+        if close is None:
+            raise ValueError("no Close column")
+        close = close.dropna()
+        o, h, low = _col("Open"), _col("High"), _col("Low")
+        closes = [round(float(v), 4) for v in close.tolist()]
+        dates = [d.strftime(fmt) for d in close.index]
+        for idx in close.index:
+            cv = float(close.loc[idx])
+            ov = float(o.loc[idx]) if o is not None and idx in o.index and o.loc[idx] == o.loc[idx] else cv
+            hv = float(h.loc[idx]) if h is not None and idx in h.index and h.loc[idx] == h.loc[idx] else cv
+            lv = float(low.loc[idx]) if low is not None and idx in low.index and low.loc[idx] == low.loc[idx] else cv
+            t = int(idx.timestamp()) if intraday else idx.strftime("%Y-%m-%d")
+            bars.append({"t": t, "o": round(ov, 4), "h": round(hv, 4),
+                         "l": round(lv, 4), "c": round(cv, 4)})
+    except Exception as exc:
+        logger.warning("history %s (%s) failed: %s", sym, range, exc)
+    return {"symbol": sym, "range": range.upper(), "closes": closes, "dates": dates,
+            "bars": bars, "intraday": intraday}
+
+
+@router.get("/quote")
+def quote(symbol: str) -> dict:
+    """Level-1 top-of-book (bid / ask / spread) for the order ticket's depth panel.
+
+    Uses Saxo infoprices when the broker is connected (real quote); otherwise
+    derives an indicative bid/ask from the last close with a small synthetic
+    spread and labels it as such — never presents synthetic data as live L2."""
+    sym = (symbol or "").strip().upper()
+    # Try Saxo first (real top-of-book), best-effort.
+    try:
+        from app.core.enums import BrokerMode
+        from app.data.database import session_scope
+        from app.portfolio.engine import PortfolioEngine
+
+        with session_scope() as session:
+            engine = PortfolioEngine(session)
+            if engine.broker_mode is BrokerMode.SAXO:
+                from app.execution.broker_adapter import build_broker
+
+                adapter = build_broker(BrokerMode.SAXO)
+                q = adapter.top_of_book(sym) if hasattr(adapter, "top_of_book") else None
+                if q and (q.get("bid") or q.get("ask")):
+                    bid, ask = q.get("bid"), q.get("ask")
+                    mid = q.get("mid") or (((bid or 0) + (ask or 0)) / 2 if bid and ask else None)
+                    spread = (ask - bid) if (bid and ask) else None
+                    return {"symbol": sym, "source": "saxo", "bid": bid, "ask": ask,
+                            "mid": mid, "spread": spread,
+                            "bid_size": q.get("bid_size"), "ask_size": q.get("ask_size")}
+    except Exception as exc:
+        logger.info("saxo quote %s unavailable: %s", sym, exc)
+
+    # Fallback: indicative quote from the last close (yfinance), clearly labelled.
+    import yfinance as yf
+
+    try:
+        raw = yf.download(_yf_symbol(sym), period="5d", interval="1d",
+                          progress=False, auto_adjust=True, timeout=20)
         close = raw["Close"] if "Close" in raw else raw
         if hasattr(close, "columns"):
             close = close.iloc[:, 0]
-        close = close.dropna()
-        closes = [round(float(v), 4) for v in close.tolist()]
-        dates = [d.strftime(fmt) for d in close.index]
+        last = float(close.dropna().iloc[-1])
+        half = max(last * 0.0005, 0.01)  # ~10 bps indicative spread
+        return {"symbol": sym, "source": "indicative", "bid": round(last - half, 2),
+                "ask": round(last + half, 2), "mid": round(last, 2),
+                "spread": round(half * 2, 2), "bid_size": None, "ask_size": None}
     except Exception as exc:
-        logger.warning("history %s (%s) failed: %s", sym, range, exc)
-    return {"symbol": sym, "range": range.upper(), "closes": closes, "dates": dates}
+        logger.warning("quote %s failed: %s", sym, exc)
+        return {"symbol": sym, "source": "none", "bid": None, "ask": None,
+                "mid": None, "spread": None}

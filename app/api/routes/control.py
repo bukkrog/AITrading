@@ -196,6 +196,61 @@ def manual_buy(symbol: str, quantity: float, session: Session = Depends(get_sess
             "capped": qty < float(quantity), "reasons": assessment.reasons}
 
 
+@router.post("/manual-sell")
+def manual_sell(symbol: str, quantity: float, session: Session = Depends(get_session)) -> dict:
+    """Manually SELL (reduce) an open position. Selling only ever REDUCES exposure,
+    so the risk engine has nothing to veto; we simply cap at the held quantity and
+    route through the normal execution path (works for paper and Saxo). Full sells
+    are delegated to close-position so Saxo flattens cleanly."""
+    from app.core.enums import AuditCategory, OrderSide
+    from app.data.market_data import get_bars_df
+    from app.schemas.trading import TradeProposal
+    from app.services import audit_log_service
+    from app.services.strategy_engine import _latest_prices, build_pipeline
+
+    sym = (symbol or "").strip().upper()
+    if not sym:
+        raise HTTPException(status_code=400, detail="symbol required")
+    if quantity is None or quantity <= 0:
+        raise HTTPException(status_code=400, detail="quantity must be > 0")
+
+    engine = PortfolioEngine(session)
+    pos = engine.get_position(sym)
+    held = float(getattr(pos, "quantity", 0) or 0) if pos else 0.0
+    if held <= 0:
+        raise HTTPException(status_code=404, detail=f"No open position for '{sym}'.")
+    sell_qty = min(float(quantity), held)
+
+    # Full exit -> reuse the battle-tested close path (handles Saxo flatten + record).
+    if sell_qty >= held:
+        return close_position(sym, session)
+
+    prices = _latest_prices(session, [sym])
+    price = prices.get(sym) or float(getattr(pos, "last_price", 0) or 0)
+    if not price:
+        df = get_bars_df(session, sym)
+        price = float(df["close"].iloc[-1]) if len(df) else float(getattr(pos, "avg_price", 0) or 0)
+
+    pipe = build_pipeline(session)
+    try:
+        pipe.execution_agent.execute(TradeProposal(
+            symbol=sym, side=OrderSide.SELL, quantity=sell_qty, reference_price=price,
+        ))
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)[:200]) from exc
+    try:
+        engine.invalidate_saxo_cache()
+    except Exception:
+        pass
+    audit_log_service.record(
+        session, AuditCategory.ORDER, "manual_sell", symbol=sym,
+        message=f"Manual SELL {sell_qty:g} {sym} @ {price:.2f} (held {held:g}).",
+    )
+    session.commit()
+    return {"placed": True, "symbol": sym, "quantity": sell_qty, "requested": float(quantity),
+            "price": round(price, 4), "capped": sell_qty < float(quantity)}
+
+
 @router.post("/allocation")
 def set_allocation(
     amount: float, reset_positions: bool = True, session: Session = Depends(get_session)

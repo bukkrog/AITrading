@@ -52,7 +52,15 @@ body {
 .auto-box { border: 1px solid var(--border); border-radius: 10px; padding: 12px; background: var(--panel-2); }
 .auto-box .title { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
 .auto-box .state { font-weight: 700; margin: 6px 0 10px; }
-.main-area { flex: 1; min-width: 0; padding: 20px 24px; max-width: 1080px; }
+.main-area { flex: 1; min-width: 0; padding: 16px 20px; max-width: 1680px; }
+
+/* ---- Multi-panel terminal grid (dashboard) ---- */
+.term-grid {
+  display: grid; grid-template-columns: minmax(0, 1.85fr) minmax(0, 1fr);
+  gap: 14px; align-items: start; margin-top: 14px;
+}
+.term-col-main, .term-col-side { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+@media (max-width: 1100px) { .term-grid { grid-template-columns: 1fr; } }
 .main-area > header.topbar { margin-bottom: 18px; }
 @media (max-width: 760px) {
   .layout { flex-direction: column; }
@@ -83,8 +91,8 @@ header.topbar h1 { font-size: 20px; margin: 0; }
 .badge.live { color: var(--red); border-color: var(--red); }
 .badge.ok { color: var(--green); border-color: var(--green); }
 
-.grid { display: grid; gap: 16px; }
-.metrics { grid-template-columns: repeat(5, 1fr); }
+.grid { display: grid; gap: 12px; }
+.metrics { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
 @media (max-width: 800px) { .metrics { grid-template-columns: repeat(2, 1fr); } }
 
 .card {

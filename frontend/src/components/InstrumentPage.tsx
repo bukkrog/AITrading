@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { api } from "../api";
+import { CandleChart } from "./CandleChart";
 import { PortfolioView, OrdersView, HistoryView, SignalsView } from "./TerminalViews";
 
 type Analysis = Awaited<ReturnType<typeof api.analyzeStock>>;
@@ -19,89 +20,35 @@ function Stat({ label, value, tone }: { label: string; value: string; tone?: str
   );
 }
 
-const RANGES = ["1W", "1M", "6M", "YTD", "1Y", "5Y"];
-
-/** "2026-07-31" -> "31/07"; "2026-07-31 14:30" -> "31/07 14:30". */
-function shortDate(s?: string): string {
-  if (!s) return "";
-  const [d, t] = s.split(" ");
-  const p = d.split("-");
-  const dm = p.length === 3 ? `${p[2]}/${p[1]}` : d;
-  return t ? `${dm} ${t}` : dm;
-}
-
-/** SVG price line with Saxo-style range selector (1W…5Y) + date axis. */
-function PriceLine({ symbol }: { symbol: string }) {
-  const [range, setRange] = useState("6M");
-  const [closes, setCloses] = useState<number[] | null>(null);
-  const [dates, setDates] = useState<string[]>([]);
+/** Level-1 market depth (top of book) — real from Saxo when connected, else indicative. */
+function DepthPanel({ symbol }: { symbol: string }) {
+  const [q, setQ] = useState<Awaited<ReturnType<typeof api.marketQuote>> | null>(null);
   useEffect(() => {
     let alive = true;
-    setCloses(null); setDates([]);
-    api.marketHistory(symbol, range)
-      .then((r) => { if (alive) { setCloses(r.closes); setDates(r.dates ?? []); } })
-      .catch(() => alive && setCloses([]));
-    return () => { alive = false; };
-  }, [symbol, range]);
-  // ~6 evenly spaced date ticks for the bottom axis.
-  const ticks = useMemo(() => {
-    if (dates.length < 2) return [] as { label: string; left: number }[];
-    const N = Math.min(6, dates.length);
-    return Array.from({ length: N }, (_, k) => {
-      const i = Math.round((k / (N - 1)) * (dates.length - 1));
-      return { label: shortDate(dates[i]), left: (i / (dates.length - 1)) * 100 };
-    });
-  }, [dates]);
-  const path = useMemo(() => {
-    if (!closes || closes.length < 2) return null;
-    const W = 900, H = 220, pad = 8;
-    const min = Math.min(...closes), max = Math.max(...closes), span = max - min || 1;
-    const x = (i: number) => pad + (i / (closes.length - 1)) * (W - 2 * pad);
-    const y = (v: number) => pad + (1 - (v - min) / span) * (H - 2 * pad);
-    const up = closes[closes.length - 1] >= closes[0];
-    const line = closes.map((c, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(c).toFixed(1)}`).join(" ");
-    const area = `${line} L${x(closes.length - 1).toFixed(1)},${H - pad} L${x(0).toFixed(1)},${H - pad} Z`;
-    return { line, area, up, W, H };
-  }, [closes]);
-  const rangeChg = closes && closes.length >= 2 && closes[0]
-    ? ((closes[closes.length - 1] - closes[0]) / closes[0]) * 100 : null;
+    const load = () => api.marketQuote(symbol).then((r) => alive && setQ(r)).catch(() => {});
+    load(); const id = setInterval(load, 5000); return () => { alive = false; clearInterval(id); };
+  }, [symbol]);
+  const spreadPct = q?.spread && q?.mid ? (q.spread / q.mid) * 100 : null;
+  const Row = ({ label, price, size, tone }: { label: string; price?: number | null; size?: number | null; tone: string }) => (
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "5px 8px", background: "var(--panel-2)", borderRadius: 5 }}>
+      <span style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: ".04em", color: "var(--muted)" }}>{label}</span>
+      <span style={{ fontVariantNumeric: "tabular-nums", fontWeight: 700, color: tone }}>{num(price)}</span>
+      <span className="muted" style={{ fontSize: 11, fontVariantNumeric: "tabular-nums", minWidth: 44, textAlign: "right" }}>{size == null ? "" : num(size, 0)}</span>
+    </div>
+  );
   return (
-    <div>
-      <div style={{ display: "flex", gap: 4, marginBottom: 8, alignItems: "center" }}>
-        {RANGES.map((r) => (
-          <button key={r} type="button" onClick={() => setRange(r)}
-            className={r === range ? "" : "secondary"} style={{ padding: "3px 11px", fontSize: 11 }}>{r}</button>
-        ))}
-        {rangeChg != null && (
-          <span style={{ marginLeft: "auto", fontSize: 13, fontWeight: 700, fontVariantNumeric: "tabular-nums",
-            color: rangeChg >= 0 ? POS : NEG }}>
-            {rangeChg >= 0 ? "▲" : "▼"} {rangeChg >= 0 ? "+" : ""}{rangeChg.toFixed(2)}% <span className="muted" style={{ fontWeight: 400 }}>({range})</span>
-          </span>
-        )}
+    <div style={{ borderTop: "1px solid var(--border)", paddingTop: 10, marginBottom: 12 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6 }}>
+        <span className="muted" style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: ".05em" }}>Markedsdybde (L1)</span>
+        {q && <span className="muted" style={{ fontSize: 10 }}>{q.source === "saxo" ? "● Saxo live" : q.source === "indicative" ? "○ indikativ" : "—"}</span>}
       </div>
-      {closes === null ? (
-        <div className="muted" style={{ fontSize: 12, padding: 40, textAlign: "center" }}>indlæser kurshistorik…</div>
-      ) : !path ? (
-        <div className="muted" style={{ fontSize: 12, padding: 40, textAlign: "center" }}>ingen kurshistorik for {symbol}</div>
-      ) : (
-        <div>
-          <svg viewBox={`0 0 ${path.W} ${path.H}`} width="100%" height={220} preserveAspectRatio="none">
-            <path d={path.area} fill={path.up ? "rgba(36,192,122,.10)" : "rgba(242,84,91,.10)"} stroke="none" />
-            <path d={path.line} fill="none" stroke={path.up ? POS : NEG} strokeWidth="1.6" />
-          </svg>
-          {ticks.length > 0 && (
-            <div style={{ position: "relative", height: 16, marginTop: 2, borderTop: "1px solid var(--border)" }}>
-              {ticks.map((t, i) => (
-                <span key={i} className="muted" style={{
-                  position: "absolute", top: 3, left: `${t.left}%`, fontSize: 10, fontVariantNumeric: "tabular-nums",
-                  transform: i === 0 ? "none" : i === ticks.length - 1 ? "translateX(-100%)" : "translateX(-50%)",
-                  whiteSpace: "nowrap",
-                }}>{t.label}</span>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
+      <div style={{ display: "grid", gap: 4 }}>
+        <Row label="Ask" price={q?.ask} size={q?.ask_size} tone={NEG} />
+        <Row label="Bid" price={q?.bid} size={q?.bid_size} tone={POS} />
+      </div>
+      <div className="muted" style={{ fontSize: 11, marginTop: 6, textAlign: "center", fontVariantNumeric: "tabular-nums" }}>
+        Spread {num(q?.spread)} {spreadPct != null && `· ${spreadPct.toFixed(2)}%`}
+      </div>
     </div>
   );
 }
@@ -127,14 +74,17 @@ function WorkspaceTabs({ onOpen, onToast }: { onOpen?: (s: string) => void; onTo
   );
 }
 
-/** Center analysis page for a single instrument + a risk-checked manual BUY ticket. */
+/** Center analysis workstation for a single instrument: candlestick chart + a
+ *  risk-checked Buy/Sell ticket (with SL/TP + position calculator + L1 depth). */
 export function InstrumentPage({ symbol, onClose, onTraded, onOpen, onToast }: { symbol: string; onClose?: () => void; onTraded?: () => void; onOpen?: (s: string) => void; onToast?: (m: string) => void }) {
   const [a, setA] = useState<Analysis | null>(null);
+  const [side, setSide] = useState<"BUY" | "SELL">("BUY");
   const [qty, setQty] = useState("1");
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<string | null>(null);
   const [riskDkk, setRiskDkk] = useState("500");
   const [stopPct, setStopPct] = useState("8");
+  const [tpPct, setTpPct] = useState("16");
 
   useEffect(() => {
     let alive = true;
@@ -143,25 +93,35 @@ export function InstrumentPage({ symbol, onClose, onTraded, onOpen, onToast }: {
     return () => { alive = false; };
   }, [symbol]);
 
-  const buy = async () => {
+  const submit = async () => {
     const q = Number(qty);
     if (!Number.isFinite(q) || q <= 0) { setResult("Angiv et antal > 0"); return; }
     setBusy(true); setResult(null);
     try {
-      const r = await api.manualBuy(symbol, q);
-      if (r.placed) {
-        setResult(`✅ Købt ${r.quantity} ${r.symbol} @ ${num(r.price)}${r.capped ? ` (afkortet fra ${r.requested} af risk-motoren)` : ""}${r.stop_price ? ` · stop @ ${num(r.stop_price)}` : ""}`);
-        onTraded?.();
+      if (side === "BUY") {
+        const r = await api.manualBuy(symbol, q);
+        if (r.placed) {
+          setResult(`✅ Købt ${r.quantity} ${r.symbol} @ ${num(r.price)}${r.capped ? ` (afkortet fra ${r.requested} af risk-motoren)` : ""}${r.stop_price ? ` · stop @ ${num(r.stop_price)}` : ""}`);
+          onTraded?.();
+        } else {
+          setResult(`⛔ Afvist af risk-motoren: ${(r.reasons || []).join("; ") || "ukendt"}`);
+        }
       } else {
-        setResult(`⛔ Afvist af risk-motoren: ${(r.reasons || []).join("; ") || "ukendt"}`);
+        const r = await api.manualSell(symbol, q);
+        const sold = r.quantity ?? 0;
+        setResult(`✅ Solgt ${num(sold, 0)} ${symbol}${r.price ? ` @ ${num(r.price)}` : ""}${r.capped ? " (afkortet til beholdning)" : ""}`);
+        onTraded?.();
       }
     } catch (e) {
       setResult(`Fejl: ${(e as Error).message}`);
     } finally { setBusy(false); }
   };
 
+  const isBuy = side === "BUY";
+  const sideColor = isBuy ? POS : NEG;
   const estCost = a?.price ? Number(qty) * a.price : null;
   const stopPrice = a?.price && Number(stopPct) > 0 ? a.price * (1 - Number(stopPct) / 100) : null;
+  const tpPrice = a?.price && Number(tpPct) > 0 ? a.price * (1 + Number(tpPct) / 100) : null;
   const suggestedQty = a?.price && Number(stopPct) > 0 && Number(riskDkk) > 0
     ? Math.max(1, Math.floor(Number(riskDkk) / (a.price * (Number(stopPct) / 100))))
     : null;
@@ -178,7 +138,7 @@ export function InstrumentPage({ symbol, onClose, onTraded, onOpen, onToast }: {
             {a?.from_high_pct != null && <span className="muted" style={{ fontSize: 12 }}>{pct(a.from_high_pct)} fra 52u-høj</span>}
             {onClose && <button className="secondary" style={{ marginLeft: "auto", padding: "3px 10px", fontSize: 12 }} onClick={onClose}>Luk</button>}
           </div>
-          {a?.error ? <p className="error">{a.error}</p> : <PriceLine symbol={symbol} />}
+          {a?.error ? <p className="error">{a.error}</p> : <CandleChart symbol={symbol} />}
         </div>
 
         {a && !a.error && (
@@ -211,11 +171,19 @@ export function InstrumentPage({ symbol, onClose, onTraded, onOpen, onToast }: {
         )}
       </div>
 
-      {/* ---- Right: BUY ticket ---- */}
+      {/* ---- Right: order ticket ---- */}
       <div className="card" style={{ position: "sticky", top: 68 }}>
-        <h2>Køb-ticket</h2>
+        {/* Buy / Sell toggle */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginBottom: 10 }}>
+          <button onClick={() => setSide("BUY")} className={isBuy ? "" : "secondary"}
+            style={{ padding: "8px 0", fontWeight: 700, background: isBuy ? POS : undefined }}>KØB</button>
+          <button onClick={() => setSide("SELL")} className={!isBuy ? "" : "secondary"}
+            style={{ padding: "8px 0", fontWeight: 700, background: !isBuy ? NEG : undefined }}>SÆLG</button>
+        </div>
         <div style={{ fontSize: 12, marginBottom: 8 }} className="muted">
-          Manuelt køb går <strong style={{ color: "var(--text)" }}>gennem risk-motoren</strong> — kill switch, max-position, eksponering og gearings-loft håndhæves (kan afkorte/afvise, aldrig udvide).
+          {isBuy
+            ? <>Køb går <strong style={{ color: "var(--text)" }}>gennem risk-motoren</strong> — kill switch, max-position, eksponering og gearing håndhæves (kan afkorte/afvise).</>
+            : <>Salg <strong style={{ color: "var(--text)" }}>reducerer</strong> positionen (afkortes til din beholdning). Fuldt salg lukker positionen.</>}
         </div>
         <label className="field" style={{ fontSize: 12 }}>Antal</label>
         <input type="number" min="1" step="1" value={qty} onChange={(e) => setQty(e.target.value)} style={{ width: "100%", margin: "4px 0 8px" }} />
@@ -223,34 +191,48 @@ export function InstrumentPage({ symbol, onClose, onTraded, onOpen, onToast }: {
           Est. værdi: <span style={{ color: "var(--text)", fontVariantNumeric: "tabular-nums" }}>{estCost == null ? "—" : num(estCost, 0)}</span>
           {a?.price != null && ` @ ${num(a.price)}/stk`}
         </div>
-        {/* ---- Positions-beregner (risiko → antal) ---- */}
+
+        {/* Level-1 depth */}
+        <DepthPanel symbol={symbol} />
+
+        {/* SL / TP */}
         <div style={{ borderTop: "1px solid var(--border)", paddingTop: 10, marginBottom: 12 }}>
-          <div className="muted" style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 6 }}>Positions-beregner</div>
+          <div className="muted" style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 6 }}>Stop-loss / take-profit</div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-            <div>
-              <label className="field" style={{ fontSize: 11 }}>Risiko (DKK)</label>
-              <input type="number" min="0" step="50" value={riskDkk} onChange={(e) => setRiskDkk(e.target.value)} style={{ width: "100%", margin: "3px 0 0" }} />
-            </div>
             <div>
               <label className="field" style={{ fontSize: 11 }}>Stop %</label>
               <input type="number" min="0" step="0.5" value={stopPct} onChange={(e) => setStopPct(e.target.value)} style={{ width: "100%", margin: "3px 0 0" }} />
+              <div className="muted" style={{ fontSize: 11, marginTop: 3 }}>≈ <span style={{ color: NEG }}>{num(stopPrice)}</span></div>
             </div>
-          </div>
-          <div style={{ fontSize: 12, marginTop: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }} className="muted">
-            <span>Forslag: <span style={{ color: "var(--text)", fontWeight: 700 }}>{suggestedQty ?? "—"} stk</span>
-              {stopPrice != null && <> · stop ≈ {num(stopPrice)}</>}</span>
-            {suggestedQty != null && (
-              <button className="secondary" style={{ padding: "2px 9px", fontSize: 11 }} onClick={() => setQty(String(suggestedQty))}>Brug</button>
-            )}
-          </div>
-          <div className="muted" style={{ fontSize: 10, marginTop: 4, lineHeight: 1.4 }}>
-            Vejledende — risk-motoren fastsætter det endelige stop og kan afkorte antallet.
+            <div>
+              <label className="field" style={{ fontSize: 11 }}>Take-profit %</label>
+              <input type="number" min="0" step="0.5" value={tpPct} onChange={(e) => setTpPct(e.target.value)} style={{ width: "100%", margin: "3px 0 0" }} />
+              <div className="muted" style={{ fontSize: 11, marginTop: 3 }}>≈ <span style={{ color: POS }}>{num(tpPrice)}</span></div>
+            </div>
           </div>
         </div>
 
-        <button onClick={buy} disabled={busy || !a || !!a.error}
-          style={{ width: "100%", background: POS, fontSize: 15, padding: "11px 0" }}>
-          {busy ? "Køber…" : `KØB ${symbol}`}
+        {/* Position calculator (buy sizing) */}
+        {isBuy && (
+          <div style={{ borderTop: "1px solid var(--border)", paddingTop: 10, marginBottom: 12 }}>
+            <div className="muted" style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 6 }}>Positions-beregner</div>
+            <label className="field" style={{ fontSize: 11 }}>Risiko (DKK)</label>
+            <input type="number" min="0" step="50" value={riskDkk} onChange={(e) => setRiskDkk(e.target.value)} style={{ width: "100%", margin: "3px 0 8px" }} />
+            <div style={{ fontSize: 12, display: "flex", justifyContent: "space-between", alignItems: "center" }} className="muted">
+              <span>Forslag: <span style={{ color: "var(--text)", fontWeight: 700 }}>{suggestedQty ?? "—"} stk</span></span>
+              {suggestedQty != null && (
+                <button className="secondary" style={{ padding: "2px 9px", fontSize: 11 }} onClick={() => setQty(String(suggestedQty))}>Brug</button>
+              )}
+            </div>
+            <div className="muted" style={{ fontSize: 10, marginTop: 4, lineHeight: 1.4 }}>
+              Antal så tabet ved stop ≈ risiko-beløbet. Risk-motoren fastsætter det endelige stop.
+            </div>
+          </div>
+        )}
+
+        <button onClick={submit} disabled={busy || !a || !!a.error}
+          style={{ width: "100%", background: sideColor, fontSize: 15, padding: "11px 0", fontWeight: 700 }}>
+          {busy ? (isBuy ? "Køber…" : "Sælger…") : `${isBuy ? "KØB" : "SÆLG"} ${symbol}`}
         </button>
         {result && <div style={{ fontSize: 12, marginTop: 10, lineHeight: 1.5 }}>{result}</div>}
       </div>

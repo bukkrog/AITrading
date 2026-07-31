@@ -206,37 +206,7 @@ export function App() {
               </div>
             )}
 
-            {/* ---- Live activity: what the platform is doing right now ---- */}
-            {activity && (
-              <div className="card" style={{ marginBottom: 12, padding: "10px 14px" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <span style={{
-                    width: 9, height: 9, borderRadius: "50%", flexShrink: 0,
-                    background: automation?.state.enabled ? "#3fb950" : "#8b949e",
-                    boxShadow: automation?.state.enabled ? "0 0 6px #3fb950" : "none",
-                  }} />
-                  <div>
-                    <span style={{ fontSize: 13 }}>
-                      <strong>Now:</strong> {automation?.state.enabled ? activity.current.text : "Auto Trading is stopped"}
-                    </span>
-                    <span className="muted" style={{ fontSize: 11, marginLeft: 8 }}>
-                      {activity.current.seconds_ago < 90
-                        ? `${Math.round(activity.current.seconds_ago)}s ago`
-                        : `${Math.round(activity.current.seconds_ago / 60)} min ago`}
-                    </span>
-                  </div>
-                </div>
-                {activity.recent.length > 0 && (
-                  <div className="muted" style={{ fontSize: 11, marginTop: 6, paddingLeft: 19 }}>
-                    {activity.recent.slice(0, 3).map((r, i) => (
-                      <div key={i}>· {r.text}</div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* ---- Top box: today's activity + realised P&L by period ---- */}
+            {/* ---- Top full-width strips: realised-by-period + account metrics ---- */}
             {perf && perf.realized && (
               <div className="card" style={{ marginBottom: 12 }}>
                 <div className="grid metrics">
@@ -262,15 +232,16 @@ export function App() {
               <Metric label="Drawdown" value={pct(portfolio.drawdown_pct)} tone={portfolio.drawdown_pct > 0 ? "neg" : undefined} />
               <Metric label="Open positions" value={String(portfolio.positions.length)} />
             </div>
-            <div className="card section-gap">
+
+            {/* ---- Multi-panel terminal grid: main (left) + side (right) ---- */}
+            <div className="term-grid">
+            <div className="term-col-main">
+            <div className="card">
               <h2>Equity curve</h2>
               <EquityChart snapshots={snapshots} />
             </div>
 
-            <CostCard />
-            <RiskRadar />
-
-            <div className="card section-gap">
+            <div className="card">
               <h2>Positions</h2>
               {portfolio.positions.length > 0 ? (
                 <table>
@@ -346,7 +317,7 @@ export function App() {
 
             {/* ---- Realised P&L by stock (which names you actually gained/lost on) ---- */}
             {realized && realized.per_symbol.length > 0 && (
-              <div className="card section-gap">
+              <div className="card">
                 <h2>Realised P&amp;L by stock</h2>
                 <p className="muted" style={{ fontSize: 12, marginTop: -4 }}>
                   From closed trades{realized.source === "saxo" ? " (Saxo)" : ""}. Total realised{" "}
@@ -371,11 +342,45 @@ export function App() {
               </div>
             )}
             {portfolio.source === "saxo" && (
-              <div className="section-gap">
-                <OpenOrders orders={portfolio.open_orders ?? []} onChanged={refresh} onToast={showToast} />
+              <OpenOrders orders={portfolio.open_orders ?? []} onChanged={refresh} onToast={showToast} />
+            )}
+            </div>{/* /term-col-main */}
+
+            <div className="term-col-side">
+            {/* ---- Live activity: what the platform is doing right now ---- */}
+            {activity && (
+              <div className="card" style={{ padding: "10px 14px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <span style={{
+                    width: 9, height: 9, borderRadius: "50%", flexShrink: 0,
+                    background: automation?.state.enabled ? "#3fb950" : "#8b949e",
+                    boxShadow: automation?.state.enabled ? "0 0 6px #3fb950" : "none",
+                  }} />
+                  <div>
+                    <span style={{ fontSize: 13 }}>
+                      <strong>Now:</strong> {automation?.state.enabled ? activity.current.text : "Auto Trading is stopped"}
+                    </span>
+                    <span className="muted" style={{ fontSize: 11, marginLeft: 8 }}>
+                      {activity.current.seconds_ago < 90
+                        ? `${Math.round(activity.current.seconds_ago)}s ago`
+                        : `${Math.round(activity.current.seconds_ago / 60)} min ago`}
+                    </span>
+                  </div>
+                </div>
+                {activity.recent.length > 0 && (
+                  <div className="muted" style={{ fontSize: 11, marginTop: 6, paddingLeft: 19 }}>
+                    {activity.recent.slice(0, 3).map((r, i) => (
+                      <div key={i}>· {r.text}</div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
-            <div className="card section-gap">
+
+            <CostCard />
+            <RiskRadar />
+
+            <div className="card">
               <h2>Latest signals</h2>
               {signals.length > 0 ? (
                 <div style={{ overflowX: "auto" }}>
@@ -397,6 +402,8 @@ export function App() {
                 </div>
               ) : <p className="muted">No signals yet.</p>}
             </div>
+            </div>{/* /term-col-side */}
+            </div>{/* /term-grid */}
           </>
         )}
 
