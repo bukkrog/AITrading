@@ -123,6 +123,18 @@ export const api = {
   marketQuote: (symbol: string) =>
     get<{ symbol: string; source: string; bid: number | null; ask: number | null; mid: number | null; spread: number | null; bid_size?: number | null; ask_size?: number | null }>(
       `/market/quote?symbol=${encodeURIComponent(symbol)}`),
+  signalTrace: (symbol: string) =>
+    get<{
+      symbol: string; error?: string; price?: number; approved?: boolean; entry_mode?: string;
+      combined_score?: number; quantity?: number; stop_price?: number | null;
+      stages?: {
+        key: string; label: string; status: "pass" | "fail" | "wait" | "skip" | "info";
+        value?: number | null; threshold?: number | null; direction?: string; mode?: string;
+        detail?: string; risk_score?: number; stop_price?: number | null; reference_price?: number;
+        reasons?: string[]; note?: string;
+        headlines?: { title: string; sentiment: { score: number; label: "good" | "bad" | "neutral" } }[];
+      }[];
+    }>(`/signals/trace?symbol=${encodeURIComponent(symbol)}`),
   entryMode: () => get<{ entry_mode: "suggest" | "auto" }>("/control/entry-mode"),
   setEntryMode: (mode: "suggest" | "auto") =>
     post<{ entry_mode: string }>(`/control/entry-mode?mode=${mode}`),

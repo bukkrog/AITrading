@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import { CandleChart } from "./CandleChart";
+import { TradeFlow } from "./TradeFlow";
 import { PortfolioView, OrdersView, HistoryView, SignalsView } from "./TerminalViews";
 
 type Analysis = Awaited<ReturnType<typeof api.analyzeStock>>;
@@ -85,6 +86,7 @@ export function InstrumentPage({ symbol, onClose, onTraded, onOpen, onToast }: {
   const [riskDkk, setRiskDkk] = useState("500");
   const [stopPct, setStopPct] = useState("8");
   const [tpPct, setTpPct] = useState("16");
+  const [showFlow, setShowFlow] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -136,7 +138,8 @@ export function InstrumentPage({ symbol, onClose, onTraded, onOpen, onToast }: {
             <h2 style={{ margin: 0, border: "none", padding: 0, fontSize: 22, color: "var(--text)", textTransform: "none", letterSpacing: 0 }}>{symbol}</h2>
             {a?.price != null && <span style={{ fontSize: 20, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{num(a.price)}</span>}
             {a?.from_high_pct != null && <span className="muted" style={{ fontSize: 12 }}>{pct(a.from_high_pct)} fra 52u-høj</span>}
-            {onClose && <button className="secondary" style={{ marginLeft: "auto", padding: "3px 10px", fontSize: 12 }} onClick={onClose}>Luk</button>}
+            <button className="secondary" style={{ marginLeft: "auto", padding: "3px 10px", fontSize: 12 }} onClick={() => setShowFlow(true)} title="Kør aktien gennem motorerne (visuelt)">🔬 Handelsflow</button>
+            {onClose && <button className="secondary" style={{ padding: "3px 10px", fontSize: 12 }} onClick={onClose}>Luk</button>}
           </div>
           {a?.error ? <p className="error">{a.error}</p> : <CandleChart symbol={symbol} />}
         </div>
@@ -238,6 +241,7 @@ export function InstrumentPage({ symbol, onClose, onTraded, onOpen, onToast }: {
       </div>
     </div>
     <WorkspaceTabs onOpen={onOpen} onToast={onToast} />
+    {showFlow && <TradeFlow symbol={symbol} onClose={() => setShowFlow(false)} />}
     </>
   );
 }

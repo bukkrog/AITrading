@@ -35,6 +35,44 @@ body {
 }
 .sidebar .brand { font-size: 16px; font-weight: 700; padding: 6px 8px 12px; }
 .sidebar .brand small { display: block; font-weight: 400; color: var(--muted); font-size: 11px; margin-top: 2px; }
+/* ---- TradeFlow (visual decision-path) ---- */
+.tf-overlay {
+  position: fixed; inset: 0; z-index: 100; background: rgba(3, 6, 12, .66);
+  display: grid; place-items: center; padding: 20px; backdrop-filter: blur(2px);
+  animation: tf-fade .2s ease both;
+}
+.tf-panel {
+  background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+  width: min(680px, 96vw); max-height: 92vh; display: flex; flex-direction: column;
+  box-shadow: 0 24px 60px rgba(0,0,0,.5);
+}
+.tf-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 18px 8px; }
+.tf-flow { overflow-y: auto; padding: 8px 18px 20px; }
+.tf-node { display: grid; grid-template-columns: 44px 1fr; gap: 12px; position: relative; padding-bottom: 14px; animation: tf-in .5s ease both; animation-delay: calc(var(--i) * .28s); }
+/* connector line between the dots */
+.tf-node:not(:last-child)::before {
+  content: ""; position: absolute; left: 21px; top: 44px; bottom: -2px; width: 2px;
+  background: linear-gradient(var(--border), var(--border));
+}
+.tf-node:not(:last-child)::after {
+  content: ""; position: absolute; left: 18px; top: 44px; width: 8px; height: 8px; border-radius: 50%;
+  background: var(--accent); box-shadow: 0 0 8px var(--accent);
+  animation: tf-drip 1.6s linear infinite; animation-delay: calc(var(--i) * .28s + .4s);
+}
+.tf-dot {
+  width: 44px; height: 44px; border-radius: 50%; border: 2px solid; display: grid; place-items: center;
+  position: relative; z-index: 1;
+}
+.tf-body { border: 1px solid; border-radius: 8px; padding: 9px 12px; background: var(--panel-2); }
+.tf-badge { font-size: 10px; font-weight: 700; padding: 1px 8px; border-radius: 999px; text-transform: uppercase; letter-spacing: .04em; }
+.tf-track { position: relative; height: 6px; border-radius: 3px; background: var(--border); margin-top: 7px; overflow: visible; }
+.tf-fill { height: 100%; border-radius: 3px; transition: width .6s ease; }
+.tf-thr { position: absolute; top: -3px; width: 2px; height: 12px; background: var(--text); opacity: .6; }
+@keyframes tf-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes tf-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+@keyframes tf-drip { 0% { transform: translateY(0); opacity: 0; } 20% { opacity: 1; } 80% { opacity: 1; } 100% { transform: translateY(26px); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .tf-node, .tf-overlay { animation: none; } .tf-node::after { display: none; } }
+
 .nav-group { margin-bottom: 8px; }
 .nav-group-label {
   font-size: 10px; text-transform: uppercase; letter-spacing: .08em;

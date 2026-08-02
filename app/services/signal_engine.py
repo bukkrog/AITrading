@@ -37,8 +37,12 @@ def evaluate(
     news_agent: NewsAnalystAgent,
     risk_agent: RiskManagerAgent,
     headlines: list[str] | None = None,
+    persist: bool = True,
 ) -> SignalResult:
-    """Evaluate a single symbol and persist the resulting signal + decision."""
+    """Evaluate a single symbol and (by default) persist the signal + decision.
+
+    ``persist=False`` runs the identical decision path but writes nothing — used
+    by the read-only trade-flow visualisation so it always mirrors reality."""
     quant = quant_agent.analyze(symbol, df)
     news = news_agent.analyze(symbol, headlines)
     reference_price = prices.get(symbol, float(df["close"].iloc[-1]) if len(df) else 0.0)
@@ -98,37 +102,40 @@ def evaluate(
 
     direction = SignalDirection.BULLISH if bullish else SignalDirection.NEUTRAL
 
-    signal_row = Signal(
-        symbol=symbol,
-        direction=direction.value,
-        quant_score=quant.score,
-        news_score=news.score,
-        combined_score=combined_score,
-        risk_score=risk.risk_score,
-        decision=decision.value,
-        quant_rationale=quant.rationale,
-        news_rationale=news.rationale,
-        risk_rationale=risk.rationale,
-        reject_reason="" if approved else " ".join(reasons),
-    )
-    session.add(signal_row)
-    session.flush()
+    signal_id: int | None = None
+    if persist:
+        signal_row = Signal(
+            symbol=symbol,
+            direction=direction.value,
+            quant_score=quant.score,
+            news_score=news.score,
+            combined_score=combined_score,
+            risk_score=risk.risk_score,
+            decision=decision.value,
+            quant_rationale=quant.rationale,
+            news_rationale=news.rationale,
+            risk_rationale=risk.rationale,
+            reject_reason="" if approved else " ".join(reasons),
+        )
+        session.add(signal_row)
+        session.flush()
+        signal_id = signal_row.id
 
-    audit_log_service.record(
-        session,
-        AuditCategory.SIGNAL,
-        "evaluate",
-        symbol=symbol,
-        message=f"{decision.value.upper()} combined={combined_score} "
-        f"(Q={quant.score}, N={news.score}, R={risk.risk_score})",
-        payload={
-            "signal_id": signal_row.id,
-            "reasons": reasons,
-            "quant": quant.rationale,
-            "news": news.rationale,
-            "risk": risk.rationale,
-        },
-    )
+        audit_log_service.record(
+            session,
+            AuditCategory.SIGNAL,
+            "evaluate",
+            symbol=symbol,
+            message=f"{decision.value.upper()} combined={combined_score} "
+            f"(Q={quant.score}, N={news.score}, R={risk.risk_score})",
+            payload={
+                "signal_id": signal_id,
+                "reasons": reasons,
+                "quant": quant.rationale,
+                "news": news.rationale,
+                "risk": risk.rationale,
+            },
+        )
 
     return SignalResult(
         symbol=symbol,
@@ -139,5 +146,5 @@ def evaluate(
         combined_score=combined_score,
         approved=approved,
         reasons=reasons or ["All gates passed."],
-        signal_id=signal_row.id,
+        signal_id=signal_id,
     )

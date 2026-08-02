@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "../api";
 import type { DiscoveryCandidate, OpenOrder, Portfolio, Signal } from "../types";
 import { IndicesBar } from "./IndicesBar";
+import { TradeFlow } from "./TradeFlow";
 
 const POS = "var(--pos, #24c07a)";
 const NEG = "var(--neg, #f2545b)";
@@ -119,6 +120,7 @@ export function SuggestionsView({ onOpen, onToast }: { onOpen?: (s: string) => v
   const [data, setData] = useState<Awaited<ReturnType<typeof api.suggestions>> | null>(null);
   const [mode, setMode] = useState<"suggest" | "auto" | null>(null);
   const [busy, setBusy] = useState<number | null>(null);
+  const [flow, setFlow] = useState<string | null>(null);
   const load = () => api.suggestions().then(setData).catch(() => {});
   useEffect(() => {
     load(); api.entryMode().then((r) => setMode(r.entry_mode)).catch(() => {});
@@ -170,6 +172,7 @@ export function SuggestionsView({ onOpen, onToast }: { onOpen?: (s: string) => v
                 <td>{n(s.reference_price)}</td><td className="muted">{s.stop_price == null ? "—" : n(s.stop_price)}</td>
                 <td className="muted" style={{ fontSize: 12, textAlign: "left", maxWidth: 260 }}>{s.rationale}</td>
                 <td style={{ whiteSpace: "nowrap" }}>
+                  <button className="secondary" onClick={() => setFlow(s.symbol)} style={{ padding: "3px 8px", fontSize: 12 }} title="Se hvordan platformen bedømmer aktien">🔬 Flow</button>{" "}
                   <button disabled={busy === s.id} onClick={() => act(s.id, "approve")} style={{ padding: "3px 10px", fontSize: 12, background: POS, fontWeight: 700 }}>Godkend</button>{" "}
                   <button disabled={busy === s.id} className="secondary" onClick={() => act(s.id, "reject")} style={{ padding: "3px 8px", fontSize: 12 }}>Afvis</button>
                 </td>
@@ -187,7 +190,10 @@ export function SuggestionsView({ onOpen, onToast }: { onOpen?: (s: string) => v
                 <td>{n(s.suggested_quantity, 0)}</td><td>{n(s.reference_price)}</td>
                 <td className="muted">{s.stop_price == null ? "—" : n(s.stop_price)}</td>
                 <td className="muted" style={{ fontSize: 12 }}>⏳ {until(s.expires_at)}</td>
-                <td><button disabled={busy === s.id} className="secondary" onClick={() => act(s.id, "reject")} style={{ padding: "3px 8px", fontSize: 12 }}>Annullér</button></td>
+                <td style={{ whiteSpace: "nowrap" }}>
+                  <button className="secondary" onClick={() => setFlow(s.symbol)} style={{ padding: "3px 8px", fontSize: 12 }}>🔬 Flow</button>{" "}
+                  <button disabled={busy === s.id} className="secondary" onClick={() => act(s.id, "reject")} style={{ padding: "3px 8px", fontSize: 12 }}>Annullér</button>
+                </td>
               </tr>
             ))}</tbody></table>
         )}
@@ -210,6 +216,8 @@ export function SuggestionsView({ onOpen, onToast }: { onOpen?: (s: string) => v
             ))}</tbody></table>
         </Card>
       )}
+
+      {flow && <TradeFlow symbol={flow} onClose={() => setFlow(null)} />}
     </>
   );
 }
