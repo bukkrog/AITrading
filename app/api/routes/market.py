@@ -191,9 +191,11 @@ _NEWS_CACHE: dict = {"key": None, "ts": 0.0, "data": None}
 _NEWS_TTL = 120.0
 
 
-def _news_symbols() -> list[str]:
-    """Symbols to pull news for: open positions ∪ the automation universe."""
-    syms: list[str] = []
+def _news_symbols() -> tuple[list[str], set[str]]:
+    """Symbols to pull news for, owned-first: open positions then the automation
+    universe (the watchlist). Returns (ordered_symbols, owned_set)."""
+    owned: list[str] = []
+    watch: list[str] = []
     try:
         from app.data.database import session_scope
         from app.portfolio.engine import PortfolioEngine
@@ -204,21 +206,22 @@ def _news_symbols() -> list[str]:
                 for p in PortfolioEngine(session).positions():
                     s = str(getattr(p, "symbol", "")).split(":")[0].upper()
                     if s:
-                        syms.append(s)
+                        owned.append(s)
             except Exception:
                 pass
             try:
                 state = automation.get_state(session)
                 raw = getattr(state, "universe", "") or ""
-                syms += [s.strip().split(":")[0].upper() for s in raw.split(",") if s.strip()]
+                watch += [s.strip().split(":")[0].upper() for s in raw.split(",") if s.strip()]
             except Exception:
                 pass
     except Exception as exc:
         logger.info("news symbol set failed: %s", exc)
-    # De-dupe, preserve order, cap the fan-out.
+    owned_set = set(owned)
+    # Owned first, then the rest of the watchlist; de-dupe, cap the fan-out.
     seen: set[str] = set()
-    ordered = [s for s in syms if not (s in seen or seen.add(s))]
-    return ordered[:12]
+    ordered = [s for s in owned + watch if not (s in seen or seen.add(s))]
+    return ordered[:12], owned_set
 
 
 @router.get("/news")
@@ -235,8 +238,9 @@ def news(symbols: str | None = None, limit: int = 30) -> dict:
 
     if symbols:
         wanted = [s.strip().split(":")[0].upper() for s in symbols.split(",") if s.strip()][:12]
+        owned_set: set[str] = set()
     else:
-        wanted = _news_symbols()
+        wanted, owned_set = _news_symbols()
     if not wanted:
         return {"items": [], "symbols": [], "reason": "no positions or universe symbols yet"}
 
@@ -246,22 +250,28 @@ def news(symbols: str | None = None, limit: int = 30) -> dict:
         return _NEWS_CACHE["data"]
 
     from app.data.feeds import fetch_news_items
+    from app.services.ai_analysis_service import headline_sentiment
 
     items: list[dict] = []
     seen_titles: set[str] = set()
     for sym in wanted:
         try:
             for it in fetch_news_items(_yf_symbol(sym), limit=8):
-                it = {**it, "symbol": sym}  # show the portfolio symbol, not the yahoo one
-                t = (it.get("title") or "").strip().lower()
-                if t and t not in seen_titles:
-                    seen_titles.add(t)
-                    items.append(it)
+                t = (it.get("title") or "").strip()
+                tl = t.lower()
+                if not tl or tl in seen_titles:
+                    continue
+                seen_titles.add(tl)
+                items.append({
+                    **it, "symbol": sym,  # show the portfolio symbol, not the yahoo one
+                    "owned": sym in owned_set,
+                    "sentiment": headline_sentiment(t),
+                })
         except Exception as exc:
             logger.info("news fetch %s failed: %s", sym, exc)
 
-    # Newest first (items without a timestamp sink to the bottom).
-    items.sort(key=lambda x: x.get("published") or "", reverse=True)
-    data = {"items": items[:limit], "symbols": wanted, "reason": None}
+    # Owned tickers first, then newest first within each group.
+    items.sort(key=lambda x: (x.get("owned") is True, x.get("published") or ""), reverse=True)
+    data = {"items": items[:limit], "symbols": wanted, "owned": sorted(owned_set), "reason": None}
     _NEWS_CACHE.update(key=key, ts=now, data=data)
     return data

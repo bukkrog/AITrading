@@ -106,6 +106,21 @@ def _heuristic(symbol: str, headlines: list[str]) -> NewsScore:
     )
 
 
+def headline_sentiment(title: str) -> dict:
+    """Fast, deterministic per-headline sentiment for the News feed.
+
+    Uses the same keyword lexicon as the heuristic scorer but on a single
+    headline, so it is instant and offline-safe (no AI call per item).
+    Returns {score: 0-100, label: 'good'|'bad'|'neutral', pos, neg}."""
+    words = {w.strip(".,!?:;\"'()").lower() for w in (title or "").split()}
+    pos = len(words & _POSITIVE)
+    neg = len(words & _NEGATIVE)
+    total = pos + neg
+    score = 50.0 if total == 0 else max(0.0, min(100.0, 50.0 + ((pos - neg) / total) * 45.0))
+    label = "good" if score > 55 else "bad" if score < 45 else "neutral"
+    return {"score": round(score, 1), "label": label, "pos": pos, "neg": neg}
+
+
 def _build_client():
     """Construct an Anthropic client per the configured auth mode.
 

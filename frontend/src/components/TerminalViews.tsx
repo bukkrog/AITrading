@@ -133,7 +133,24 @@ function ago(ts?: string | null): string {
   return `${Math.round(s / 86400)} d siden`;
 }
 
-/** News — aggregated Yahoo headlines across your positions + universe. */
+/** Good/Bad sentiment badge (0-100) for a headline. */
+function SentimentBadge({ s }: { s?: { score: number; label: "good" | "bad" | "neutral" } }) {
+  if (!s) return null;
+  const map = {
+    good: { bg: "rgba(36,192,122,.14)", fg: POS, txt: "Godt" },
+    bad: { bg: "rgba(242,84,91,.14)", fg: NEG, txt: "Skidt" },
+    neutral: { bg: "var(--panel-2)", fg: "var(--muted)", txt: "Neutral" },
+  }[s.label];
+  return (
+    <span title={`Sentiment ${s.score}/100 (keyword-heuristik)`} style={{
+      flexShrink: 0, fontSize: 10, fontWeight: 700, padding: "1px 7px", borderRadius: 4,
+      background: map.bg, color: map.fg, fontVariantNumeric: "tabular-nums",
+    }}>{s.score.toFixed(0)} · {map.txt}</span>
+  );
+}
+
+/** News — Yahoo headlines centred on your watchlist, owned tickers first, each
+ *  with a Good/Bad sentiment score (0-100). */
 export function NewsView({ onOpen }: { onOpen?: (s: string) => void }) {
   const [data, setData] = useState<Awaited<ReturnType<typeof api.marketNews>> | null>(null);
   useEffect(() => {
@@ -142,8 +159,14 @@ export function NewsView({ onOpen }: { onOpen?: (s: string) => void }) {
     load(); const id = setInterval(load, 60000); return () => { alive = false; clearInterval(id); };
   }, []);
   const items = data?.items ?? [];
+  const ownedCount = data?.owned?.length ?? 0;
   return (
     <Card title={`Markeds-nyheder${data?.symbols?.length ? ` — ${data.symbols.length} tickere` : ""}`}>
+      {ownedCount > 0 && (
+        <p className="muted" style={{ fontSize: 11, marginTop: -4, marginBottom: 8 }}>
+          💼 Dine {ownedCount} beholdninger vises først · sentiment 0–100 pr. overskrift (keyword-heuristik)
+        </p>
+      )}
       {!data ? <p className="muted">indlæser…</p>
         : items.length === 0 ? (
           <p className="muted" style={{ fontSize: 13 }}>
@@ -156,10 +179,12 @@ export function NewsView({ onOpen }: { onOpen?: (s: string) => void }) {
         ) : (
           <div style={{ display: "flex", flexDirection: "column" }}>
             {items.map((it, i) => (
-              <div key={i} style={{ padding: "9px 0", borderTop: i ? "1px solid var(--border)" : "none" }}>
-                <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+              <div key={i} style={{ padding: "9px 0", borderTop: i ? "1px solid var(--border)" : "none",
+                borderLeft: it.owned ? `2px solid ${POS}` : "2px solid transparent", paddingLeft: it.owned ? 8 : 0 }}>
+                <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
                   <button className="secondary" style={{ padding: "1px 7px", fontSize: 11, fontWeight: 700, flexShrink: 0 }}
-                    onClick={() => onOpen?.(it.symbol)}>{it.symbol}</button>
+                    onClick={() => onOpen?.(it.symbol)}>{it.owned ? "💼 " : ""}{it.symbol}</button>
+                  <SentimentBadge s={it.sentiment} />
                   {it.url ? (
                     <a href={it.url} target="_blank" rel="noopener noreferrer"
                       style={{ fontSize: 13, fontWeight: 600, color: "var(--text)", textDecoration: "none", lineHeight: 1.35 }}>
