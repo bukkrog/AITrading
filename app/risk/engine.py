@@ -31,8 +31,14 @@ class RiskEngine:
         *,
         requested_quantity: float | None = None,
         stop_price: float | None = None,
+        ignore_position_count: bool = False,
     ) -> RiskAssessment:
-        """Assess a proposed trade and return an approve/reject decision."""
+        """Assess a proposed trade and return an approve/reject decision.
+
+        ``ignore_position_count`` skips ONLY the max-open-positions gate — used to
+        size an *advisory* buy suggestion "as if a slot were free" when the book is
+        full. Every other limit (kill switch, loss halts, exposure, cash, per-trade
+        risk, per-position %) still applies, and real execution never sets this."""
         side = OrderSide(side)
         reasons: list[str] = []
         cfg = self.config
@@ -78,7 +84,7 @@ class RiskEngine:
             reasons.append(f"Already holding or pending {symbol} — not adding (one position per symbol).")
             return RiskAssessment(approved=False, risk_score=50.0, reasons=reasons)
         open_count = len(self.portfolio.open_positions())
-        if is_new_symbol and open_count >= cfg.max_open_positions:
+        if is_new_symbol and open_count >= cfg.max_open_positions and not ignore_position_count:
             reasons.append(
                 f"Max open positions reached ({open_count}/{cfg.max_open_positions})."
             )

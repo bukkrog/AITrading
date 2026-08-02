@@ -94,6 +94,7 @@ export interface Suggestion {
   fill_price: number | null;
   fill_quantity: number | null;
   note: string;
+  capacity_blocked: boolean;
 }
 
 export interface Signal {

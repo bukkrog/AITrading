@@ -35,6 +35,7 @@ def _serialize(s: BuySuggestion) -> dict:
         "fill_price": s.fill_price,
         "fill_quantity": s.fill_quantity,
         "note": s.note,
+        "capacity_blocked": bool(getattr(s, "capacity_blocked", False)),
     }
 
 

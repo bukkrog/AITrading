@@ -81,6 +81,14 @@ def init_db() -> None:
             logger.info("Migration: added automation_state.entry_mode")
     except Exception as exc:  # never block startup on a migration probe
         logger.warning("entry_mode migration check failed: %s", exc)
+    try:
+        cols = {c["name"] for c in inspect(engine).get_columns("buy_suggestions")}
+        if cols and "capacity_blocked" not in cols:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE buy_suggestions ADD COLUMN capacity_blocked BOOLEAN DEFAULT 0"))
+            logger.info("Migration: added buy_suggestions.capacity_blocked")
+    except Exception as exc:  # never block startup on a migration probe
+        logger.warning("capacity_blocked migration check failed: %s", exc)
     logger.info("Database initialised (%s)", settings.database_url)
 
 

@@ -75,6 +75,23 @@ def test_record_and_dedupe(session):
     assert suggestions.has_open_suggestion(session, "AAPL") is True
 
 
+def test_capacity_blocked_flag(session):
+    sug = suggestions.record_suggestion(session, _signal("PLTR"), 40.0, 30.0, 36.0, capacity_blocked=True)
+    session.flush()
+    assert sug is not None and sug.capacity_blocked is True
+    assert "plads" in sug.note.lower()
+
+
+def test_score_gates_pass_helper():
+    from app.services.strategy_engine import _score_gates_pass
+    from app.config import settings
+
+    # Advisory mode (news doesn't gate): strong quant + bullish passes.
+    assert settings.news_gate_mode in ("advisory", "gate")
+    r = _signal("AAPL")  # quant 80 bullish, news 70 bullish
+    assert _score_gates_pass(r) is True
+
+
 def test_approve_arms_and_sets_expiry(session):
     suggestions.record_suggestion(session, _signal("NVDA"), 100.0, 5.0, 90.0)
     session.flush()

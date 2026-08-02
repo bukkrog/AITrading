@@ -162,11 +162,18 @@ export function SuggestionsView({ onOpen, onToast }: { onOpen?: (s: string) => v
       </div>
 
       <Card title={`Foreslåede køb${proposed.length ? ` — ${proposed.length}` : ""}`}>
+        {proposed.some((s) => s.capacity_blocked) && (
+          <p className="muted" style={{ fontSize: 11, marginTop: -4, marginBottom: 8, color: "#e3a008" }}>
+            🔒 Nogle forslag er stærke kandidater, men porteføljen er fuld. Godkend + sælg en svagere position for at rotere ind — købet sker automatisk når der er en ledig plads.
+          </p>
+        )}
         {proposed.length === 0 ? <p className="muted">Ingen forslag lige nu{mode === "auto" ? " (Auto-drift køber selv)." : "."}</p> : (
           <table><thead><tr><th>Symbol</th><th>Quant</th><th>News</th><th>Antal</th><th>Pris</th><th>Stop</th><th>Begrundelse</th><th></th></tr></thead>
             <tbody>{proposed.map((s) => (
               <tr key={s.id}>
-                <td><Sym s={s.symbol} onOpen={onOpen} /></td>
+                <td><Sym s={s.symbol} onOpen={onOpen} />{s.capacity_blocked && (
+                  <span title="Bogen er fuld — sælg noget for at gøre plads" style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, padding: "1px 6px", borderRadius: 4, background: "rgba(227,160,8,.15)", color: "#e3a008" }}>🔒 plads</span>
+                )}</td>
                 <td style={{ color: POS, fontWeight: 600 }}>{n(s.quant_score, 0)}</td>
                 <td>{n(s.news_score, 0)}</td><td>{n(s.suggested_quantity, 0)}</td>
                 <td>{n(s.reference_price)}</td><td className="muted">{s.stop_price == null ? "—" : n(s.stop_price)}</td>

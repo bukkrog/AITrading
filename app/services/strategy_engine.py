@@ -40,6 +40,22 @@ logger = get_logger(__name__)
 # Below this quant score an open long position is closed.
 EXIT_QUANT_SCORE = 50.0
 
+_CAPACITY_MARKER = "Max open positions reached"
+
+
+def _score_gates_pass(result: SignalResult) -> bool:
+    """True if a signal cleared the quant/news SCORE gates (risk aside) — used to
+    detect a strong candidate blocked only by a full book (capacity)."""
+    from app.core.enums import SignalDirection
+
+    def _bull(d) -> bool:
+        return d in (SignalDirection.BULLISH, SignalDirection.BULLISH.value)
+
+    q_ok = result.quant.score > settings.quant_score_threshold and _bull(result.quant.direction)
+    if settings.news_gate_mode == "advisory":
+        return q_ok
+    return q_ok and result.news.score > settings.news_score_threshold and _bull(result.news.direction)
+
 
 def _recently_traded(session: Session, symbol: str, minutes: int) -> bool:
     """True if ``symbol`` had an order within the last ``minutes`` (churn guard)."""
@@ -457,6 +473,29 @@ def run_cycle(
                 pipe.portfolio.reserve_entry(sym, qty, prices[sym])
             except Exception as exc:  # one bad order shouldn't kill the cycle
                 _order_skip(session, sym, "entry", exc)
+
+        # ---- Capacity-blocked suggestion (suggest mode) -------------------
+        # A strong candidate that cleared the score gates but was vetoed ONLY
+        # because the book is full: surface it as an advisory suggestion, sized
+        # as if a slot were free. It can't fill until the user frees a slot.
+        elif entry_mode == "suggest" and _score_gates_pass(result) and any(
+            _CAPACITY_MARKER in r for r in (result.risk.reasons or [])
+        ):
+            price = prices.get(sym)
+            if price:
+                try:
+                    from app.services import suggestions as _suggestions
+
+                    cap = pipe.risk_engine.assess(
+                        sym, OrderSide.BUY, price, prices, ignore_position_count=True
+                    )
+                    if cap.approved and cap.approved_quantity > 0:
+                        _suggestions.record_suggestion(
+                            session, result, price, cap.approved_quantity, cap.stop_price,
+                            capacity_blocked=True,
+                        )
+                except Exception as exc:
+                    logger.warning("capacity suggestion for %s failed: %s", sym, exc)
 
     # Refresh prices (unchanged intra-cycle) and snapshot.
     snap = pipe.portfolio.snapshot(prices)

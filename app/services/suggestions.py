@@ -60,9 +60,12 @@ def has_open_suggestion(session: Session, symbol: str) -> bool:
 
 def record_suggestion(
     session: Session, result: SignalResult, price: float, quantity: float,
-    stop_price: float | None,
+    stop_price: float | None, *, capacity_blocked: bool = False,
 ) -> BuySuggestion | None:
-    """Persist an approved candidate as a *proposed* buy suggestion (deduped)."""
+    """Persist an approved candidate as a *proposed* buy suggestion (deduped).
+
+    ``capacity_blocked`` marks a strong candidate proposed while the book was
+    full — advisory only; it can't fill until the user frees a slot."""
     sym = result.symbol
     if quantity <= 0 or price <= 0:
         return None
@@ -77,12 +80,15 @@ def record_suggestion(
         suggested_quantity=float(quantity),
         reference_price=float(price),
         stop_price=stop_price,
+        capacity_blocked=capacity_blocked,
+        note="Kræver en ledig plads (bogen er fuld)." if capacity_blocked else "",
     )
     session.add(sug)
     audit_log_service.record(
         session, AuditCategory.ORDER, "buy_suggested", symbol=sym,
         message=f"Proposed BUY {quantity:g} {sym} @ {price:.2f} "
-        f"(quant {sug.quant_score:.0f}/news {sug.news_score:.0f}) — awaiting approval.",
+        f"(quant {sug.quant_score:.0f}/news {sug.news_score:.0f})"
+        f"{' — capacity-blocked (full book)' if capacity_blocked else ''} — awaiting approval.",
     )
     return sug
 

@@ -258,6 +258,9 @@ class BuySuggestion(Base):
     fill_price: Mapped[float | None] = mapped_column(Float, nullable=True)
     fill_quantity: Mapped[float | None] = mapped_column(Float, nullable=True)
     note: Mapped[str] = mapped_column(String(512), default="")
+    # Strong candidate but the book was full when proposed — advisory only; the
+    # user must free a slot (sell something) before it can fill.
+    capacity_blocked: Mapped[bool] = mapped_column(default=False)
 
 
 class AuditLog(Base):
