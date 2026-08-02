@@ -121,14 +121,61 @@ export function SignalsView({ onOpen }: { onOpen?: (s: string) => void }) {
   );
 }
 
-/** News — placeholder until a dedicated news feed endpoint exists. */
-export function NewsView() {
+/** Relative "for X min siden" from an ISO/epoch timestamp. */
+function ago(ts?: string | null): string {
+  if (!ts) return "";
+  const d = new Date(ts);
+  if (isNaN(d.getTime())) return "";
+  const s = (Date.now() - d.getTime()) / 1000;
+  if (s < 90) return "nu";
+  if (s < 3600) return `${Math.round(s / 60)} min siden`;
+  if (s < 86400) return `${Math.round(s / 3600)} t siden`;
+  return `${Math.round(s / 86400)} d siden`;
+}
+
+/** News — aggregated Yahoo headlines across your positions + universe. */
+export function NewsView({ onOpen }: { onOpen?: (s: string) => void }) {
+  const [data, setData] = useState<Awaited<ReturnType<typeof api.marketNews>> | null>(null);
+  useEffect(() => {
+    let alive = true;
+    const load = () => api.marketNews().then((r) => alive && setData(r)).catch(() => {});
+    load(); const id = setInterval(load, 60000); return () => { alive = false; clearInterval(id); };
+  }, []);
+  const items = data?.items ?? [];
   return (
-    <Card title="Markeds-nyheder">
-      <p className="muted" style={{ fontSize: 13 }}>
-        Nyheds-feed kommer — platformen scorer allerede overskrifter pr. aktie (news-agenten),
-        men et samlet nyheds-endpoint mangler. Søg en aktie i top-bar'en for dens analyse i mellemtiden.
-      </p>
+    <Card title={`Markeds-nyheder${data?.symbols?.length ? ` — ${data.symbols.length} tickere` : ""}`}>
+      {!data ? <p className="muted">indlæser…</p>
+        : items.length === 0 ? (
+          <p className="muted" style={{ fontSize: 13 }}>
+            {data.reason === "news disabled or offline (synthetic)"
+              ? "Nyheder er slået fra (synthetic/offline datakilde). Sæt markeds-datakilden til yfinance/Saxo i Settings."
+              : data.reason === "no positions or universe symbols yet"
+                ? "Ingen tickere at hente nyheder for endnu — åbn en position eller sæt et universe under Auto Trading."
+                : "Ingen nyheder fundet lige nu."}
+          </p>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column" }}>
+            {items.map((it, i) => (
+              <div key={i} style={{ padding: "9px 0", borderTop: i ? "1px solid var(--border)" : "none" }}>
+                <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+                  <button className="secondary" style={{ padding: "1px 7px", fontSize: 11, fontWeight: 700, flexShrink: 0 }}
+                    onClick={() => onOpen?.(it.symbol)}>{it.symbol}</button>
+                  {it.url ? (
+                    <a href={it.url} target="_blank" rel="noopener noreferrer"
+                      style={{ fontSize: 13, fontWeight: 600, color: "var(--text)", textDecoration: "none", lineHeight: 1.35 }}>
+                      {it.title}
+                    </a>
+                  ) : (
+                    <span style={{ fontSize: 13, fontWeight: 600, lineHeight: 1.35 }}>{it.title}</span>
+                  )}
+                </div>
+                <div className="muted" style={{ fontSize: 11, marginTop: 3, marginLeft: 34 }}>
+                  {it.publisher || "—"}{it.published ? ` · ${ago(it.published)}` : ""}{it.url ? " · åbner i ny fane ↗" : ""}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
     </Card>
   );
 }

@@ -463,7 +463,7 @@ export function App() {
         {view === "signals" && <SignalsView onOpen={openInstrument} />}
 
         {/* ---- News ---- */}
-        {view === "news" && <NewsView />}
+        {view === "news" && <NewsView onOpen={openInstrument} />}
 
         {/* ---- Discovery / Watchlists (live market scan) ---- */}
         {view === "discovery" && <DiscoveryView />}

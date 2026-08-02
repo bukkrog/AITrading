@@ -105,3 +105,53 @@ def fetch_news(symbol: str, *, limit: int = 8) -> list[str]:
     except Exception as exc:  # pragma: no cover - network/dep path
         logger.warning("yfinance news failed for %s (%s).", symbol, exc)
         return []
+
+
+def fetch_news_items(symbol: str, *, limit: int = 8) -> list[dict]:
+    """Return recent news items for ``symbol`` as dicts with title/publisher/url/
+    published (ISO) — a richer shape than :func:`fetch_news` (titles only) for the
+    News feed UI. Empty when unavailable or in offline ``synthetic`` mode."""
+    if not settings.news_enabled or settings.market_data_source == "synthetic":
+        return []
+    try:
+        import yfinance as yf
+
+        items = yf.Ticker(symbol).news or []
+        out: list[dict] = []
+        for it in items[:limit]:
+            content = it.get("content", it) if isinstance(it, dict) else {}
+            title = content.get("title") or (it.get("title") if isinstance(it, dict) else None)
+            if not title:
+                continue
+            # URL — yfinance shape has shifted; probe the common nestings.
+            url = None
+            for k in ("canonicalUrl", "clickThroughUrl"):
+                v = content.get(k)
+                if isinstance(v, dict) and v.get("url"):
+                    url = v["url"]
+                    break
+            url = url or (it.get("link") if isinstance(it, dict) else None)
+            # Publisher.
+            prov = content.get("provider")
+            publisher = (prov.get("displayName") if isinstance(prov, dict) else None) \
+                or (it.get("publisher") if isinstance(it, dict) else None)
+            # Published time — either an ISO string (pubDate) or epoch seconds.
+            published = content.get("pubDate") or content.get("displayTime")
+            epoch = it.get("providerPublishTime") if isinstance(it, dict) else None
+            if not published and epoch:
+                try:
+                    from datetime import datetime, timezone
+
+                    published = datetime.fromtimestamp(int(epoch), tz=timezone.utc).isoformat()
+                except Exception:
+                    published = None
+            out.append({
+                "symbol": symbol, "title": str(title),
+                "publisher": str(publisher) if publisher else None,
+                "url": str(url) if url else None,
+                "published": published,
+            })
+        return out
+    except Exception as exc:  # pragma: no cover - network/dep path
+        logger.warning("yfinance news items failed for %s (%s).", symbol, exc)
+        return []

@@ -122,6 +122,9 @@ export const api = {
   marketQuote: (symbol: string) =>
     get<{ symbol: string; source: string; bid: number | null; ask: number | null; mid: number | null; spread: number | null; bid_size?: number | null; ask_size?: number | null }>(
       `/market/quote?symbol=${encodeURIComponent(symbol)}`),
+  marketNews: (symbols?: string) =>
+    get<{ items: { symbol: string; title: string; publisher: string | null; url: string | null; published: string | null }[]; symbols: string[]; reason: string | null }>(
+      `/market/news${symbols ? `?symbols=${encodeURIComponent(symbols)}` : ""}`),
   tradeLog: (limit = 80) =>
     get<{ ts: string; symbol: string; side: string; quantity: number; price: number; value: number; commission: number; reason: string }[]>(
       `/trades/log?limit=${limit}`,

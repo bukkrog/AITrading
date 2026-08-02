@@ -184,3 +184,84 @@ def quote(symbol: str) -> dict:
         logger.warning("quote %s failed: %s", sym, exc)
         return {"symbol": sym, "source": "none", "bid": None, "ask": None,
                 "mid": None, "spread": None}
+
+
+# Market news is network-heavy (one Yahoo call per symbol) — cache per symbol-set.
+_NEWS_CACHE: dict = {"key": None, "ts": 0.0, "data": None}
+_NEWS_TTL = 120.0
+
+
+def _news_symbols() -> list[str]:
+    """Symbols to pull news for: open positions ∪ the automation universe."""
+    syms: list[str] = []
+    try:
+        from app.data.database import session_scope
+        from app.portfolio.engine import PortfolioEngine
+        from app.services import automation
+
+        with session_scope() as session:
+            try:
+                for p in PortfolioEngine(session).positions():
+                    s = str(getattr(p, "symbol", "")).split(":")[0].upper()
+                    if s:
+                        syms.append(s)
+            except Exception:
+                pass
+            try:
+                state = automation.get_state(session)
+                raw = getattr(state, "universe", "") or ""
+                syms += [s.strip().split(":")[0].upper() for s in raw.split(",") if s.strip()]
+            except Exception:
+                pass
+    except Exception as exc:
+        logger.info("news symbol set failed: %s", exc)
+    # De-dupe, preserve order, cap the fan-out.
+    seen: set[str] = set()
+    ordered = [s for s in syms if not (s in seen or seen.add(s))]
+    return ordered[:12]
+
+
+@router.get("/news")
+def news(symbols: str | None = None, limit: int = 30) -> dict:
+    """Aggregated market-news feed for the News page.
+
+    Pulls recent Yahoo headlines for the given ``symbols`` (comma-separated) or,
+    by default, for the open positions plus the automation universe. Results are
+    de-duped by title, newest first, and cached briefly."""
+    from app.config import settings
+
+    if not settings.news_enabled or settings.market_data_source == "synthetic":
+        return {"items": [], "symbols": [], "reason": "news disabled or offline (synthetic)"}
+
+    if symbols:
+        wanted = [s.strip().split(":")[0].upper() for s in symbols.split(",") if s.strip()][:12]
+    else:
+        wanted = _news_symbols()
+    if not wanted:
+        return {"items": [], "symbols": [], "reason": "no positions or universe symbols yet"}
+
+    key = ",".join(sorted(wanted))
+    now = time.time()
+    if _NEWS_CACHE["data"] is not None and _NEWS_CACHE["key"] == key and now - _NEWS_CACHE["ts"] < _NEWS_TTL:
+        return _NEWS_CACHE["data"]
+
+    from app.data.feeds import fetch_news_items
+
+    items: list[dict] = []
+    seen_titles: set[str] = set()
+    for sym in wanted:
+        try:
+            for it in fetch_news_items(_yf_symbol(sym), limit=8):
+                it = {**it, "symbol": sym}  # show the portfolio symbol, not the yahoo one
+                t = (it.get("title") or "").strip().lower()
+                if t and t not in seen_titles:
+                    seen_titles.add(t)
+                    items.append(it)
+        except Exception as exc:
+            logger.info("news fetch %s failed: %s", sym, exc)
+
+    # Newest first (items without a timestamp sink to the bottom).
+    items.sort(key=lambda x: x.get("published") or "", reverse=True)
+    data = {"items": items[:limit], "symbols": wanted, "reason": None}
+    _NEWS_CACHE.update(key=key, ts=now, data=data)
+    return data
