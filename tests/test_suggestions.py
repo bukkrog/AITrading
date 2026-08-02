@@ -110,6 +110,30 @@ def test_reject(session):
     assert sug.status == "rejected" and sug.resolved_at is not None
 
 
+def test_reactivate_rejected(session):
+    suggestions.record_suggestion(session, _signal("SNOW"), 100.0, 5.0, 90.0)
+    session.flush()
+    sug = session.query(BuySuggestion).filter_by(symbol="SNOW").one()
+    suggestions.reject(session, sug.id)
+    assert sug.status == "rejected"
+    suggestions.reactivate(session, sug.id)
+    assert sug.status == "proposed" and sug.resolved_at is None
+
+
+def test_reactivate_refused_when_open_exists(session):
+    import pytest as _pytest
+
+    suggestions.record_suggestion(session, _signal("DDOG"), 100.0, 5.0, 90.0)
+    session.flush()
+    sug = session.query(BuySuggestion).filter_by(symbol="DDOG").one()
+    suggestions.reject(session, sug.id)
+    # A fresh open suggestion for the same symbol now exists.
+    suggestions.record_suggestion(session, _signal("DDOG"), 101.0, 5.0, 91.0)
+    session.flush()
+    with _pytest.raises(ValueError):
+        suggestions.reactivate(session, sug.id)
+
+
 def test_process_armed_expires_past_window(session):
     suggestions.record_suggestion(session, _signal("META"), 100.0, 5.0, 90.0)
     session.flush()

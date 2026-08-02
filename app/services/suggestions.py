@@ -159,6 +159,29 @@ def reject(session: Session, sug_id: int) -> BuySuggestion:
     return sug
 
 
+def reactivate(session: Session, sug_id: int) -> BuySuggestion:
+    """Undo a rejection/expiry — put the suggestion back to *proposed* so it can
+    be approved again. Refused if the symbol already has an open suggestion."""
+    sug = session.get(BuySuggestion, sug_id)
+    if sug is None:
+        raise ValueError(f"suggestion {sug_id} not found")
+    if sug.status not in ("rejected", "expired"):
+        raise ValueError(f"suggestion {sug_id} is {sug.status}, cannot reactivate")
+    if has_open_suggestion(session, sug.symbol):
+        raise ValueError(f"{sug.symbol} already has an open suggestion")
+    sug.status = "proposed"
+    sug.resolved_at = None
+    sug.armed_at = None
+    sug.expires_at = None
+    sug.fill_price = None
+    sug.fill_quantity = None
+    audit_log_service.record(
+        session, AuditCategory.ORDER, "buy_reactivated", symbol=sug.symbol,
+        message=f"Reactivated suggestion for {sug.symbol} — back to proposed.",
+    )
+    return sug
+
+
 def process_armed(session: Session, pipe, prices: dict[str, float]) -> None:
     """For each armed suggestion: fill on good timing (via the risk engine) or
     expire it after the timing window. Runs every cycle, in any entry mode."""

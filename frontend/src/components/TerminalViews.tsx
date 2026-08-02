@@ -126,11 +126,12 @@ export function SuggestionsView({ onOpen, onToast }: { onOpen?: (s: string) => v
     load(); api.entryMode().then((r) => setMode(r.entry_mode)).catch(() => {});
     const id = setInterval(load, 10000); return () => clearInterval(id);
   }, []);
-  const act = async (id: number, kind: "approve" | "reject") => {
+  const act = async (id: number, kind: "approve" | "reject" | "reactivate") => {
     setBusy(id);
     try {
-      await (kind === "approve" ? api.approveSuggestion(id) : api.rejectSuggestion(id));
-      onToast?.(kind === "approve" ? "Godkendt — platformen køber på god timing" : "Forslag afvist");
+      if (kind === "approve") { await api.approveSuggestion(id); onToast?.("Godkendt — platformen køber på god timing"); }
+      else if (kind === "reject") { await api.rejectSuggestion(id); onToast?.("Forslag afvist"); }
+      else { await api.reactivateSuggestion(id); onToast?.("Forslag genaktiveret — ligger nu som forslag igen"); }
       load();
     } catch (e) { onToast?.((e as Error).message); } finally { setBusy(null); }
   };
@@ -211,7 +212,7 @@ export function SuggestionsView({ onOpen, onToast }: { onOpen?: (s: string) => v
 
       {(data?.resolved?.length ?? 0) > 0 && (
         <Card title="Afsluttede forslag">
-          <table><thead><tr><th>Symbol</th><th>Status</th><th>Antal</th><th>Fyldt @</th><th>Note</th></tr></thead>
+          <table><thead><tr><th>Symbol</th><th>Status</th><th>Antal</th><th>Fyldt @</th><th>Note</th><th></th></tr></thead>
             <tbody>{data!.resolved.map((s) => (
               <tr key={s.id}>
                 <td>{s.symbol.split(":")[0]}</td>
@@ -219,6 +220,11 @@ export function SuggestionsView({ onOpen, onToast }: { onOpen?: (s: string) => v
                 <td>{n(s.fill_quantity ?? s.suggested_quantity, 0)}</td>
                 <td>{s.fill_price == null ? "—" : n(s.fill_price)}</td>
                 <td className="muted" style={{ fontSize: 12, textAlign: "left" }}>{s.note}</td>
+                <td style={{ whiteSpace: "nowrap" }}>
+                  {(s.status === "rejected" || s.status === "expired") && (
+                    <button disabled={busy === s.id} className="secondary" onClick={() => act(s.id, "reactivate")} style={{ padding: "2px 9px", fontSize: 12 }} title="Fortryd — læg tilbage som forslag">↩ Vælg igen</button>
+                  )}
+                </td>
               </tr>
             ))}</tbody></table>
         </Card>

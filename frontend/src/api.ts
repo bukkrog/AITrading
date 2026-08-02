@@ -142,6 +142,7 @@ export const api = {
     get<{ open: Suggestion[]; resolved: Suggestion[]; open_count: number }>("/suggestions"),
   approveSuggestion: (id: number) => post<Suggestion>(`/suggestions/${id}/approve`),
   rejectSuggestion: (id: number) => post<Suggestion>(`/suggestions/${id}/reject`),
+  reactivateSuggestion: (id: number) => post<Suggestion>(`/suggestions/${id}/reactivate`),
   marketNews: (symbols?: string) =>
     get<{ items: { symbol: string; title: string; publisher: string | null; url: string | null; published: string | null; owned?: boolean; sentiment?: { score: number; label: "good" | "bad" | "neutral"; pos: number; neg: number } }[]; symbols: string[]; owned?: string[]; reason: string | null }>(
       `/market/news${symbols ? `?symbols=${encodeURIComponent(symbols)}` : ""}`),

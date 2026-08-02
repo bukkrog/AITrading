@@ -83,3 +83,18 @@ def reject_suggestion(sug_id: int, session: Session = Depends(get_session)) -> d
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     session.commit()
     return _serialize(s)
+
+
+@router.post("/{sug_id}/reactivate")
+def reactivate_suggestion(sug_id: int, session: Session = Depends(get_session)) -> dict:
+    """Undo a rejection/expiry — return the suggestion to 'proposed'."""
+    from app.services import suggestions
+
+    try:
+        s = suggestions.reactivate(session, sug_id)
+    except ValueError as exc:
+        # 409 when it can't be reactivated (already open / wrong state), 404 if missing.
+        code = 404 if "not found" in str(exc) else 409
+        raise HTTPException(status_code=code, detail=str(exc)) from exc
+    session.commit()
+    return _serialize(s)
