@@ -76,6 +76,26 @@ export interface Snapshot {
   drawdown_pct: number;
 }
 
+export interface Suggestion {
+  id: number;
+  ts: string | null;
+  symbol: string;
+  status: "proposed" | "armed" | "filled" | "rejected" | "expired";
+  quant_score: number;
+  news_score: number;
+  risk_score: number;
+  rationale: string;
+  suggested_quantity: number;
+  reference_price: number;
+  stop_price: number | null;
+  armed_at: string | null;
+  expires_at: string | null;
+  resolved_at: string | null;
+  fill_price: number | null;
+  fill_quantity: number | null;
+  note: string;
+}
+
 export interface Signal {
   id: number;
   ts: string;

@@ -73,6 +73,14 @@ def init_db() -> None:
             logger.info("Migration: added signals.reject_reason")
     except Exception as exc:  # never block startup on a migration probe
         logger.warning("Column migration check failed: %s", exc)
+    try:
+        cols = {c["name"] for c in inspect(engine).get_columns("automation_state")}
+        if "entry_mode" not in cols:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE automation_state ADD COLUMN entry_mode VARCHAR(16) DEFAULT 'suggest'"))
+            logger.info("Migration: added automation_state.entry_mode")
+    except Exception as exc:  # never block startup on a migration probe
+        logger.warning("entry_mode migration check failed: %s", exc)
     logger.info("Database initialised (%s)", settings.database_url)
 
 

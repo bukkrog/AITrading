@@ -196,6 +196,35 @@ def manual_buy(symbol: str, quantity: float, session: Session = Depends(get_sess
             "capped": qty < float(quantity), "reasons": assessment.reasons}
 
 
+@router.get("/entry-mode")
+def get_entry_mode(session: Session = Depends(get_session)) -> dict:
+    """Current entry mode: 'suggest' (operator approves buys) or 'auto'."""
+    from app.services import automation
+
+    state = automation.get_state(session)
+    return {"entry_mode": getattr(state, "entry_mode", "suggest") or "suggest"}
+
+
+@router.post("/entry-mode")
+def set_entry_mode(mode: str, session: Session = Depends(get_session)) -> dict:
+    """Switch between 'suggest' (Man — platform proposes, you approve) and 'auto'
+    (platform buys autonomously). Selling stays automatic in both modes."""
+    from app.core.enums import AuditCategory
+    from app.services import audit_log_service, automation
+
+    mode = (mode or "").strip().lower()
+    if mode not in ("suggest", "auto"):
+        raise HTTPException(status_code=400, detail="mode must be 'suggest' or 'auto'")
+    state = automation.get_state(session)
+    state.entry_mode = mode
+    audit_log_service.record(
+        session, AuditCategory.AUTOMATION, "entry_mode",
+        message=f"Entry mode set to {mode} ({'operator approves buys' if mode == 'suggest' else 'autonomous buys'}).",
+    )
+    session.commit()
+    return {"entry_mode": mode}
+
+
 @router.post("/manual-sell")
 def manual_sell(symbol: str, quantity: float, session: Session = Depends(get_session)) -> dict:
     """Manually SELL (reduce) an open position. Selling only ever REDUCES exposure,

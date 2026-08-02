@@ -196,6 +196,7 @@ def tick(session: Session) -> dict:
             live=state.live_mode,
             fetch_news=settings.news_enabled,
             refresh_data=True,
+            entry_mode=getattr(state, "entry_mode", "suggest") or "suggest",
         )
         checks = monitoring.run_checks(session)
     except Exception as exc:

@@ -219,9 +219,45 @@ class AutomationState(Base):
         DateTime(timezone=True), nullable=True
     )
     runs_count: Mapped[int] = mapped_column(Integer, default=0)
+    # Entry mode: "suggest" = platform proposes buys for operator approval (then
+    # times the entry); "auto" = platform buys autonomously (legacy behaviour).
+    # Exits are ALWAYS automatic regardless of this setting.
+    entry_mode: Mapped[str] = mapped_column(String(16), default="suggest")
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utcnow
     )
+
+
+class BuySuggestion(Base):
+    """A proposed BUY the platform surfaces for operator approval (suggest mode).
+
+    Lifecycle: proposed -> (approved) armed -> (good entry timing) filled
+                        \\-> rejected            \\-> expired (timing never hit).
+    Selling is unaffected — exits stay fully automatic.
+    """
+
+    __tablename__ = "buy_suggestions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    ts: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    symbol: Mapped[str] = mapped_column(String(32), index=True)
+    status: Mapped[str] = mapped_column(String(16), default="proposed", index=True)
+
+    quant_score: Mapped[float] = mapped_column(Float, default=0.0)
+    news_score: Mapped[float] = mapped_column(Float, default=0.0)
+    risk_score: Mapped[float] = mapped_column(Float, default=0.0)
+    rationale: Mapped[str] = mapped_column(String(2048), default="")
+
+    suggested_quantity: Mapped[float] = mapped_column(Float, default=0.0)
+    reference_price: Mapped[float] = mapped_column(Float, default=0.0)
+    stop_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    armed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    fill_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    fill_quantity: Mapped[float | None] = mapped_column(Float, nullable=True)
+    note: Mapped[str] = mapped_column(String(512), default="")
 
 
 class AuditLog(Base):

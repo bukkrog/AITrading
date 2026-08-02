@@ -13,7 +13,7 @@ import { RiskRadar } from "./components/RiskRadar";
 import { CostCard } from "./components/CostCard";
 import { TopBar } from "./components/TopBar";
 import { InstrumentPage } from "./components/InstrumentPage";
-import { MarketsView, PortfolioView, OrdersView, HistoryView, SignalsView, NewsView } from "./components/TerminalViews";
+import { MarketsView, PortfolioView, OrdersView, HistoryView, SignalsView, NewsView, SuggestionsView } from "./components/TerminalViews";
 import { SettingsMenu } from "./components/SettingsMenu";
 import { Sidebar, type View } from "./components/Sidebar";
 import type {
@@ -63,6 +63,7 @@ export function App() {
   const [oauth, setOauth] = useState<{ configured: boolean; connected: boolean; environment: string } | null>(null);
   const [activity, setActivity] = useState<{ current: { text: string; seconds_ago: number }; recent: { text: string; seconds_ago: number }[] } | null>(null);
   const [assessments, setAssessments] = useState<Record<string, PositionAssessment>>({});
+  const [suggestionsCount, setSuggestionsCount] = useState(0);
 
   const refresh = useCallback(async () => {
     try {
@@ -97,6 +98,7 @@ export function App() {
       api.assessment()
         .then((r) => setAssessments(Object.fromEntries(r.assessments.map((x) => [x.symbol, x]))))
         .catch(() => setAssessments({}));
+      api.suggestions().then((r) => setSuggestionsCount(r.open_count)).catch(() => setSuggestionsCount(0));
     } catch (e) {
       setError((e as Error).message);
     }
@@ -145,6 +147,7 @@ export function App() {
         monitoring={monitoring}
         automation={automation}
         alertsCount={alerts.length}
+        suggestionsCount={suggestionsCount}
         onChanged={refresh}
         onToast={showToast}
       />
@@ -156,7 +159,7 @@ export function App() {
               {view === "trading" ? "Auto Trading" : view === "audit" ? "Audit log"
                 : view === "discovery" ? "Watchlists" : view === "signals" ? "AI Signals"
                 : view === "setup" ? "Settings" : view === "instrument" ? (selectedSymbol ?? "Instrument")
-                : view}
+                : view === "suggestions" ? "Forslag" : view}
             </h1>
             <div className="subtitle">Controlled · paper-first · Saxo-targeted</div>
           </div>
@@ -464,6 +467,9 @@ export function App() {
 
         {/* ---- News ---- */}
         {view === "news" && <NewsView onOpen={openInstrument} />}
+
+        {/* ---- Forslag (suggest mode: approve buys, Man/Auto) ---- */}
+        {view === "suggestions" && <SuggestionsView onOpen={openInstrument} onToast={showToast} />}
 
         {/* ---- Discovery / Watchlists (live market scan) ---- */}
         {view === "discovery" && <DiscoveryView />}

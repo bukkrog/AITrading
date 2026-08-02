@@ -3,7 +3,7 @@ import { api } from "../api";
 import type { AutomationInfo, Monitoring } from "../types";
 
 export type View =
-  | "dashboard" | "markets" | "portfolio" | "orders" | "history" | "signals" | "news"
+  | "dashboard" | "markets" | "portfolio" | "orders" | "history" | "signals" | "news" | "suggestions"
   | "trading" | "discovery" | "analytics" | "setup" | "audit" | "instrument";
 
 const NAV: { id: View; label: string; icon: string; group: string }[] = [
@@ -11,6 +11,7 @@ const NAV: { id: View; label: string; icon: string; group: string }[] = [
   { id: "markets", label: "Markets", icon: "🌐", group: "Oversigt" },
   { id: "discovery", label: "Watchlists", icon: "⭐", group: "Oversigt" },
   { id: "news", label: "News", icon: "📰", group: "Oversigt" },
+  { id: "suggestions", label: "Forslag", icon: "✅", group: "Konto" },
   { id: "portfolio", label: "Portfolio", icon: "💼", group: "Konto" },
   { id: "orders", label: "Orders", icon: "📋", group: "Konto" },
   { id: "history", label: "History", icon: "🕑", group: "Konto" },
@@ -29,11 +30,12 @@ interface Props {
   monitoring: Monitoring | null;
   automation: AutomationInfo | null;
   alertsCount: number;
+  suggestionsCount?: number;
   onChanged: () => void;
   onToast: (m: string) => void;
 }
 
-export function Sidebar({ view, setView, monitoring, automation, alertsCount, onChanged, onToast }: Props) {
+export function Sidebar({ view, setView, monitoring, automation, alertsCount, suggestionsCount = 0, onChanged, onToast }: Props) {
   const [busy, setBusy] = useState(false);
   const a = automation?.state;
   const emergency = Boolean(a?.emergency_stopped);
@@ -78,6 +80,7 @@ export function Sidebar({ view, setView, monitoring, automation, alertsCount, on
               <span>{n.icon}</span>
               <span>{n.label}</span>
               {n.id === "trading" && alertsCount > 0 && <span className="count">{alertsCount}</span>}
+              {n.id === "suggestions" && suggestionsCount > 0 && <span className="count" style={{ background: "var(--green)" }}>{suggestionsCount}</span>}
             </button>
           ))}
         </div>

@@ -24,6 +24,7 @@ import type {
   Signal,
   Snapshot,
   StreamingStatus,
+  Suggestion,
 } from "./types";
 
 // Base URL for the API. Override with VITE_API_BASE at build time. Defaults:
@@ -122,6 +123,13 @@ export const api = {
   marketQuote: (symbol: string) =>
     get<{ symbol: string; source: string; bid: number | null; ask: number | null; mid: number | null; spread: number | null; bid_size?: number | null; ask_size?: number | null }>(
       `/market/quote?symbol=${encodeURIComponent(symbol)}`),
+  entryMode: () => get<{ entry_mode: "suggest" | "auto" }>("/control/entry-mode"),
+  setEntryMode: (mode: "suggest" | "auto") =>
+    post<{ entry_mode: string }>(`/control/entry-mode?mode=${mode}`),
+  suggestions: () =>
+    get<{ open: Suggestion[]; resolved: Suggestion[]; open_count: number }>("/suggestions"),
+  approveSuggestion: (id: number) => post<Suggestion>(`/suggestions/${id}/approve`),
+  rejectSuggestion: (id: number) => post<Suggestion>(`/suggestions/${id}/reject`),
   marketNews: (symbols?: string) =>
     get<{ items: { symbol: string; title: string; publisher: string | null; url: string | null; published: string | null; owned?: boolean; sentiment?: { score: number; label: "good" | "bad" | "neutral"; pos: number; neg: number } }[]; symbols: string[]; owned?: string[]; reason: string | null }>(
       `/market/news${symbols ? `?symbols=${encodeURIComponent(symbols)}` : ""}`),

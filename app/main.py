@@ -24,6 +24,7 @@ from app.api.routes import (
     portfolio,
     settings as settings_route,
     signals,
+    suggestions,
     trades,
 )
 from app.config import settings
@@ -148,6 +149,7 @@ app.include_router(backtest.router)
 app.include_router(discovery.router)
 app.include_router(market.router)
 app.include_router(settings_route.router)
+app.include_router(suggestions.router)
 
 # Serve the built frontend (frontend/dist) from the API itself, so a server
 # deployment is ONE service on ONE port — no nginx/node needed. API routes are

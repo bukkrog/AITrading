@@ -102,6 +102,118 @@ export function HistoryView() {
   );
 }
 
+/** Days/hours until an ISO timestamp, e.g. "om 2 d" / "om 5 t". */
+function until(ts?: string | null): string {
+  if (!ts) return "";
+  const s = (new Date(ts).getTime() - Date.now()) / 1000;
+  if (isNaN(s)) return "";
+  if (s <= 0) return "udløbet";
+  if (s < 3600) return `om ${Math.round(s / 60)} min`;
+  if (s < 86400) return `om ${Math.round(s / 3600)} t`;
+  return `om ${Math.round(s / 86400)} d`;
+}
+
+/** Buy suggestions (suggest mode): approve/reject; armed items await good timing.
+ *  Includes the Man/Auto entry-mode toggle. Selling stays automatic in both modes. */
+export function SuggestionsView({ onOpen, onToast }: { onOpen?: (s: string) => void; onToast?: (m: string) => void }) {
+  const [data, setData] = useState<Awaited<ReturnType<typeof api.suggestions>> | null>(null);
+  const [mode, setMode] = useState<"suggest" | "auto" | null>(null);
+  const [busy, setBusy] = useState<number | null>(null);
+  const load = () => api.suggestions().then(setData).catch(() => {});
+  useEffect(() => {
+    load(); api.entryMode().then((r) => setMode(r.entry_mode)).catch(() => {});
+    const id = setInterval(load, 10000); return () => clearInterval(id);
+  }, []);
+  const act = async (id: number, kind: "approve" | "reject") => {
+    setBusy(id);
+    try {
+      await (kind === "approve" ? api.approveSuggestion(id) : api.rejectSuggestion(id));
+      onToast?.(kind === "approve" ? "Godkendt — platformen køber på god timing" : "Forslag afvist");
+      load();
+    } catch (e) { onToast?.((e as Error).message); } finally { setBusy(null); }
+  };
+  const switchMode = async (m: "suggest" | "auto") => {
+    try { await api.setEntryMode(m); setMode(m); onToast?.(m === "suggest" ? "Man-drift: platformen foreslår køb" : "Auto-drift: platformen køber selv"); }
+    catch (e) { onToast?.((e as Error).message); }
+  };
+  const open = data?.open ?? [];
+  const proposed = open.filter((s) => s.status === "proposed");
+  const armed = open.filter((s) => s.status === "armed");
+
+  return (
+    <>
+      <div className="card section-gap">
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+          <div>
+            <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: ".05em", color: "var(--muted)", marginBottom: 4 }}>Køb-drift</div>
+            <div style={{ display: "flex", gap: 4 }}>
+              <button onClick={() => switchMode("suggest")} className={mode === "suggest" ? "" : "secondary"} style={{ padding: "5px 12px", fontSize: 12, fontWeight: 700 }}>Man — foreslå</button>
+              <button onClick={() => switchMode("auto")} className={mode === "auto" ? "" : "secondary"} style={{ padding: "5px 12px", fontSize: 12, fontWeight: 700 }}>Auto — køb selv</button>
+            </div>
+          </div>
+          <div className="muted" style={{ fontSize: 12, maxWidth: 380, lineHeight: 1.45 }}>
+            {mode === "auto"
+              ? "Platformen åbner selv positioner. Salg er automatisk."
+              : "Platformen foreslår køb; du godkender, og den køber på god timing (ikke overkøbt/udstrakt). Salg er altid automatisk."}
+          </div>
+        </div>
+      </div>
+
+      <Card title={`Foreslåede køb${proposed.length ? ` — ${proposed.length}` : ""}`}>
+        {proposed.length === 0 ? <p className="muted">Ingen forslag lige nu{mode === "auto" ? " (Auto-drift køber selv)." : "."}</p> : (
+          <table><thead><tr><th>Symbol</th><th>Quant</th><th>News</th><th>Antal</th><th>Pris</th><th>Stop</th><th>Begrundelse</th><th></th></tr></thead>
+            <tbody>{proposed.map((s) => (
+              <tr key={s.id}>
+                <td><Sym s={s.symbol} onOpen={onOpen} /></td>
+                <td style={{ color: POS, fontWeight: 600 }}>{n(s.quant_score, 0)}</td>
+                <td>{n(s.news_score, 0)}</td><td>{n(s.suggested_quantity, 0)}</td>
+                <td>{n(s.reference_price)}</td><td className="muted">{s.stop_price == null ? "—" : n(s.stop_price)}</td>
+                <td className="muted" style={{ fontSize: 12, textAlign: "left", maxWidth: 260 }}>{s.rationale}</td>
+                <td style={{ whiteSpace: "nowrap" }}>
+                  <button disabled={busy === s.id} onClick={() => act(s.id, "approve")} style={{ padding: "3px 10px", fontSize: 12, background: POS, fontWeight: 700 }}>Godkend</button>{" "}
+                  <button disabled={busy === s.id} className="secondary" onClick={() => act(s.id, "reject")} style={{ padding: "3px 8px", fontSize: 12 }}>Afvis</button>
+                </td>
+              </tr>
+            ))}</tbody></table>
+        )}
+      </Card>
+
+      <Card title={`Armeret — afventer god timing${armed.length ? ` — ${armed.length}` : ""}`}>
+        {armed.length === 0 ? <p className="muted">Ingen armerede forslag.</p> : (
+          <table><thead><tr><th>Symbol</th><th>Antal</th><th>Ref-pris</th><th>Stop</th><th>Udløber</th><th></th></tr></thead>
+            <tbody>{armed.map((s) => (
+              <tr key={s.id}>
+                <td><Sym s={s.symbol} onOpen={onOpen} /></td>
+                <td>{n(s.suggested_quantity, 0)}</td><td>{n(s.reference_price)}</td>
+                <td className="muted">{s.stop_price == null ? "—" : n(s.stop_price)}</td>
+                <td className="muted" style={{ fontSize: 12 }}>⏳ {until(s.expires_at)}</td>
+                <td><button disabled={busy === s.id} className="secondary" onClick={() => act(s.id, "reject")} style={{ padding: "3px 8px", fontSize: 12 }}>Annullér</button></td>
+              </tr>
+            ))}</tbody></table>
+        )}
+        <p className="muted" style={{ fontSize: 11, marginTop: 8 }}>
+          Godkendte forslag købes automatisk gennem risk-motoren når kursen ikke er overkøbt/udstrakt. Rammes timingen ikke inden udløb, bortfalder forslaget.
+        </p>
+      </Card>
+
+      {(data?.resolved?.length ?? 0) > 0 && (
+        <Card title="Afsluttede forslag">
+          <table><thead><tr><th>Symbol</th><th>Status</th><th>Antal</th><th>Fyldt @</th><th>Note</th></tr></thead>
+            <tbody>{data!.resolved.map((s) => (
+              <tr key={s.id}>
+                <td>{s.symbol.split(":")[0]}</td>
+                <td><span className={`tag ${s.status === "filled" ? "approved" : "rejected"}`}>{s.status}</span></td>
+                <td>{n(s.fill_quantity ?? s.suggested_quantity, 0)}</td>
+                <td>{s.fill_price == null ? "—" : n(s.fill_price)}</td>
+                <td className="muted" style={{ fontSize: 12, textAlign: "left" }}>{s.note}</td>
+              </tr>
+            ))}</tbody></table>
+        </Card>
+      )}
+    </>
+  );
+}
+
 /** AI Signals — the engine's latest decisions. */
 export function SignalsView({ onOpen }: { onOpen?: (s: string) => void }) {
   const [sig, setSig] = useState<Signal[]>([]);

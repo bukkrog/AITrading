@@ -205,6 +205,7 @@ def run_cycle(
     live: bool = False,
     fetch_news: bool = False,
     refresh_data: bool = False,
+    entry_mode: str = "auto",
 ) -> list[SignalResult]:
     """Run one full trading cycle over ``symbols`` (``live`` uses tight caps).
 
@@ -298,6 +299,14 @@ def run_cycle(
                     # A single order failure (e.g. a sell already resting on the
                     # broker) must NOT abort the whole cycle. Log and move on.
                     _order_skip(session, pos.symbol, "exit", exc)
+
+    # ---- Armed buy-suggestions: fill on good timing / expire (any mode) -----
+    try:
+        from app.services import suggestions as _suggestions
+
+        _suggestions.process_armed(session, pipe, prices)
+    except Exception as exc:  # never let it break the cycle
+        logger.warning("armed-suggestion processing failed: %s", exc)
 
     # ---- Entries ------------------------------------------------------
     # Regime gate (Phase 2.3): in a crisis tape, run exits but open nothing new.
@@ -407,6 +416,19 @@ def run_cycle(
                     session, AuditCategory.ORDER, "event_veto", symbol=sym,
                     message=f"Skipped {sym}: binary event ahead ({event['detail']}).",
                 )
+                continue
+            # ---- Suggest mode: propose the buy instead of executing it -------
+            # The operator approves; the platform then times the entry and buys
+            # through the risk engine. Exits remain fully automatic.
+            if entry_mode == "suggest":
+                try:
+                    from app.services import suggestions as _suggestions
+
+                    _suggestions.record_suggestion(
+                        session, result, prices[sym], qty, result.risk.stop_price
+                    )
+                except Exception as exc:
+                    logger.warning("recording suggestion for %s failed: %s", sym, exc)
                 continue
             try:
                 pipe.execution_agent.execute(
