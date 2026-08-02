@@ -206,6 +206,7 @@ def run_cycle(
     fetch_news: bool = False,
     refresh_data: bool = False,
     entry_mode: str = "auto",
+    suggest_only: bool = False,
 ) -> list[SignalResult]:
     """Run one full trading cycle over ``symbols`` (``live`` uses tight caps).
 
@@ -216,6 +217,11 @@ def run_cycle(
     discovery universe would never get priced).
     """
     from app.config import settings as _settings
+
+    # suggest_only (e.g. while the market is closed): screen + propose buys but
+    # execute nothing — no sells, no armed-fills. Entries can only propose.
+    if suggest_only:
+        entry_mode = "suggest"
 
     if refresh_data and symbols:
         try:
@@ -251,7 +257,8 @@ def run_cycle(
     results: list[SignalResult] = []
 
     # ---- Exits first (free up exposure) -------------------------------
-    for pos in pipe.portfolio.open_positions():
+    # Skipped entirely in suggest_only mode (no execution while market closed).
+    for pos in (pipe.portfolio.open_positions() if not suggest_only else []):
         raw_df = get_bars_df(session, pos.symbol)
         # Reliable current price: the broker's own last price (Saxo) first, then
         # the cycle price map, then stored bars. Using the broker price avoids a
@@ -301,12 +308,15 @@ def run_cycle(
                     _order_skip(session, pos.symbol, "exit", exc)
 
     # ---- Armed buy-suggestions: fill on good timing / expire (any mode) -----
-    try:
-        from app.services import suggestions as _suggestions
+    # Only when executing (market open). Closed-market suggest_only passes never
+    # fill — filling into a closed market would park a stale-price working order.
+    if not suggest_only:
+        try:
+            from app.services import suggestions as _suggestions
 
-        _suggestions.process_armed(session, pipe, prices)
-    except Exception as exc:  # never let it break the cycle
-        logger.warning("armed-suggestion processing failed: %s", exc)
+            _suggestions.process_armed(session, pipe, prices)
+        except Exception as exc:  # never let it break the cycle
+            logger.warning("armed-suggestion processing failed: %s", exc)
 
     # ---- Entries ------------------------------------------------------
     # Regime gate (Phase 2.3): in a crisis tape, run exits but open nothing new.

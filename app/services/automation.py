@@ -54,6 +54,18 @@ def _universe(state: AutomationState) -> list[str]:
     return [s.strip().upper() for s in raw.split(",") if s.strip()]
 
 
+def _open_suggestion_count(session: Session) -> int:
+    """Count of proposed/armed buy suggestions (for closed-market pass reporting)."""
+    from sqlalchemy import func, select
+
+    from app.data.models import BuySuggestion
+
+    return int(session.scalar(
+        select(func.count(BuySuggestion.id))
+        .where(BuySuggestion.status.in_(("proposed", "armed")))
+    ) or 0)
+
+
 def configure(
     session: Session,
     *,
@@ -158,6 +170,25 @@ def tick(session: Session) -> dict:
                 overnight_watch.check(session)
             except Exception as exc:  # never let it break the pause
                 logger.warning("overnight news watch failed: %s", exc)
+
+            # Suggest mode: keep proposing buys around the clock (analysis only —
+            # screening/scoring runs on data available while closed). No orders
+            # are placed; armed fills and exits still wait for the open.
+            entry_mode = getattr(state, "entry_mode", "suggest") or "suggest"
+            suggested = 0
+            if entry_mode == "suggest":
+                try:
+                    set_activity("Market closed — screening for buy suggestions…")
+                    before = _open_suggestion_count(session)
+                    strategy_engine.run_cycle(
+                        session, _universe(state),
+                        live=state.live_mode, fetch_news=settings.news_enabled,
+                        refresh_data=True, entry_mode="suggest", suggest_only=True,
+                    )
+                    suggested = _open_suggestion_count(session) - before
+                except Exception as exc:  # never let it break the pause
+                    logger.warning("closed-market suggestion pass failed: %s", exc)
+
             session.flush()
             # If a traded exchange opens within the pre-open window, discovery has
             # already prepared the universe — surface that as a distinct phase so
@@ -177,9 +208,12 @@ def tick(session: Session) -> dict:
                 preopen = False
             if preopen:
                 set_activity(f"Pre-open warmup — universe prepared ({len(uni)} names), ready for the bell")
+            elif entry_mode == "suggest":
+                set_activity("Market closed — proposing buys (execution waits for the open)")
             else:
                 set_activity("Paused — market closed (watching news on holdings)")
-            return {"ran": False, "reason": "preopen" if preopen else "market_closed", "market": market}
+            return {"ran": entry_mode == "suggest", "reason": "preopen" if preopen else "market_closed",
+                    "suggested": suggested, "market": market}
         if _market_was_open is False:  # closed -> open transition
             audit_log_service.record(
                 session, AuditCategory.AUTOMATION, "market_open",
