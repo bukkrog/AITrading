@@ -170,7 +170,7 @@ export function SuggestionsView({ onOpen, onToast }: { onOpen?: (s: string) => v
         )}
         {proposed.length > 0 && (
           <p className="muted" style={{ fontSize: 11, marginTop: -4, marginBottom: 8 }}>
-            Sorteret <strong style={{ color: "var(--text)" }}>bedste først</strong> — efter quant-score (platformens primære gate), derefter news. #1 = stærkeste kandidat.
+            Sorteret <strong style={{ color: "var(--text)" }}>bedste først</strong> — efter kombineret quant + news-score (quant bryder uafgjort). #1 = stærkeste kandidat.
           </p>
         )}
         {proposed.length === 0 ? <p className="muted">Ingen forslag lige nu{mode === "auto" ? " (Auto-drift køber selv)." : "."}</p> : (
