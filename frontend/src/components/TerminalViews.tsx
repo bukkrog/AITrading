@@ -168,10 +168,16 @@ export function SuggestionsView({ onOpen, onToast }: { onOpen?: (s: string) => v
             🔒 Nogle forslag er stærke kandidater, men porteføljen er fuld. Godkend + sælg en svagere position for at rotere ind — købet sker automatisk når der er en ledig plads.
           </p>
         )}
+        {proposed.length > 0 && (
+          <p className="muted" style={{ fontSize: 11, marginTop: -4, marginBottom: 8 }}>
+            Sorteret <strong style={{ color: "var(--text)" }}>bedste først</strong> — efter quant-score (platformens primære gate), derefter news. #1 = stærkeste kandidat.
+          </p>
+        )}
         {proposed.length === 0 ? <p className="muted">Ingen forslag lige nu{mode === "auto" ? " (Auto-drift køber selv)." : "."}</p> : (
-          <table><thead><tr><th>Symbol</th><th>Quant</th><th>News</th><th>Antal</th><th>Pris</th><th>Stop</th><th>Begrundelse</th><th></th></tr></thead>
-            <tbody>{proposed.map((s) => (
+          <table><thead><tr><th>#</th><th>Symbol</th><th>Quant</th><th>News</th><th>Antal</th><th>Pris</th><th>Stop</th><th>Begrundelse</th><th></th></tr></thead>
+            <tbody>{proposed.map((s, i) => (
               <tr key={s.id}>
+                <td style={{ fontWeight: 700, color: i === 0 ? POS : "var(--muted)", fontVariantNumeric: "tabular-nums" }}>{i + 1}</td>
                 <td><Sym s={s.symbol} onOpen={onOpen} />{s.capacity_blocked && (
                   <span title="Bogen er fuld — sælg noget for at gøre plads" style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, padding: "1px 6px", borderRadius: 4, background: "rgba(227,160,8,.15)", color: "#e3a008" }}>🔒 plads</span>
                 )}</td>

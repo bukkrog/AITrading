@@ -42,10 +42,16 @@ def _serialize(s: BuySuggestion) -> dict:
 @router.get("")
 def list_suggestions(limit: int = 50, session: Session = Depends(get_session)) -> dict:
     """Open (proposed/armed) suggestions first, then recent resolved ones."""
+    # Best-first: strongest quant, then news, then most-recent as a tiebreaker.
+    # Quant is the platform's primary buy gate, so it ranks the "best" suggestion.
     open_rows = session.scalars(
         select(BuySuggestion)
         .where(BuySuggestion.status.in_(("proposed", "armed")))
-        .order_by(BuySuggestion.ts.desc())
+        .order_by(
+            BuySuggestion.quant_score.desc(),
+            BuySuggestion.news_score.desc(),
+            BuySuggestion.ts.desc(),
+        )
     ).all()
     resolved = session.scalars(
         select(BuySuggestion)
