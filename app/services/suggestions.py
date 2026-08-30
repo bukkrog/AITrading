@@ -30,6 +30,8 @@ ENTRY_RSI_WINDOW = 2
 ENTRY_RSI_MAX = 90.0        # RSI(2) above this = overbought, wait.
 ENTRY_EXTENDED_MARGIN = 0.01  # price no more than 1% above today's open / prev close.
 ARM_EXPIRY_TRADING_DAYS = 2   # armed suggestion expires after N trading days.
+PROPOSED_TTL_DAYS = 4         # a proposed suggestion goes stale after N calendar days.
+MAX_OPEN_PROPOSED = 25        # hard cap on the proposed backlog (keep the strongest).
 
 OPEN_STATES = ("proposed", "armed")
 
@@ -180,6 +182,42 @@ def reactivate(session: Session, sug_id: int) -> BuySuggestion:
         message=f"Reactivated suggestion for {sug.symbol} — back to proposed.",
     )
     return sug
+
+
+def prune_proposed(session: Session) -> int:
+    """Keep the proposed backlog fresh and bounded: expire suggestions older than
+    PROPOSED_TTL_DAYS, then cap the rest to the MAX_OPEN_PROPOSED strongest by
+    combined quant+news score. Returns how many were expired. Runs every cycle."""
+    now = _utcnow()
+    rows = session.scalars(
+        select(BuySuggestion).where(BuySuggestion.status == "proposed")
+    ).all()
+    expired = 0
+    fresh: list[BuySuggestion] = []
+    for s in rows:
+        ts = s.ts
+        if ts is not None and ts.tzinfo is None:
+            ts = ts.replace(tzinfo=timezone.utc)
+        if ts is not None and (now - ts).days >= PROPOSED_TTL_DAYS:
+            s.status = "expired"
+            s.resolved_at = now
+            s.note = f"Udløbet — ikke handlet inden {PROPOSED_TTL_DAYS} dage."
+            expired += 1
+        else:
+            fresh.append(s)
+    # Cap: keep the strongest by combined score, expire the weakest excess.
+    fresh.sort(key=lambda s: (s.quant_score + s.news_score), reverse=True)
+    for s in fresh[MAX_OPEN_PROPOSED:]:
+        s.status = "expired"
+        s.resolved_at = now
+        s.note = f"Beskåret — uden for top {MAX_OPEN_PROPOSED} stærkeste forslag."
+        expired += 1
+    if expired:
+        audit_log_service.record(
+            session, AuditCategory.ORDER, "suggestions_pruned",
+            message=f"Beskar {expired} forslag (TTL {PROPOSED_TTL_DAYS}d / cap {MAX_OPEN_PROPOSED}).",
+        )
+    return expired
 
 
 def process_armed(session: Session, pipe, prices: dict[str, float]) -> None:

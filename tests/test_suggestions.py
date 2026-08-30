@@ -82,6 +82,35 @@ def test_capacity_blocked_flag(session):
     assert "plads" in sug.note.lower()
 
 
+def test_local_closed_trades_fifo(session):
+    from app.api.routes.portfolio import _local_closed_trades
+    from app.data.models import Fill
+    from app.core.enums import OrderSide
+
+    t0 = datetime.now(timezone.utc)
+    session.add(Fill(order_id=0, symbol="AAPL", side=OrderSide.BUY, quantity=10, price=100.0,
+                     commission=1.0, ts=t0 - timedelta(minutes=2)))
+    session.add(Fill(order_id=0, symbol="AAPL", side=OrderSide.SELL, quantity=10, price=110.0,
+                     commission=1.0, ts=t0))
+    session.flush()
+    rows = _local_closed_trades(session, "USD")  # base=USD -> no FX conversion
+    assert len(rows) == 1
+    # 10*(110-100) - buy comm 1 - sell comm 1 = 98
+    assert abs(rows[0]["realized_pnl"] - 98.0) < 0.01
+    assert rows[0]["symbol"] == "AAPL"
+
+
+def test_roundtrip_cost_pct():
+    from types import SimpleNamespace
+    from app.services.strategy_engine import _roundtrip_cost_pct
+
+    small = _roundtrip_cost_pct(200.0, "AAPL", SimpleNamespace(saxo_active=False))
+    big = _roundtrip_cost_pct(20000.0, "AAPL", SimpleNamespace(saxo_active=False))
+    assert small > big  # a smaller trade is proportionally more expensive
+    fx = _roundtrip_cost_pct(20000.0, "AAPL", SimpleNamespace(saxo_active=True, account_currency="EUR"))
+    assert fx > big  # USD instrument on a EUR account adds FX spread
+
+
 def test_score_gates_pass_helper():
     from app.services.strategy_engine import _score_gates_pass
     from app.config import settings
@@ -108,6 +137,32 @@ def test_reject(session):
     sug = session.query(BuySuggestion).filter_by(symbol="TSLA").one()
     suggestions.reject(session, sug.id)
     assert sug.status == "rejected" and sug.resolved_at is not None
+
+
+def test_prune_expires_stale_proposed(session, monkeypatch):
+    monkeypatch.setattr(suggestions, "PROPOSED_TTL_DAYS", 4)
+    suggestions.record_suggestion(session, _signal("OLD"), 100.0, 5.0, 90.0)
+    suggestions.record_suggestion(session, _signal("NEW"), 100.0, 5.0, 90.0)
+    session.flush()
+    old = session.query(BuySuggestion).filter_by(symbol="OLD").one()
+    old.ts = datetime.now(timezone.utc) - timedelta(days=6)  # stale
+    n = suggestions.prune_proposed(session)
+    assert n == 1
+    assert session.query(BuySuggestion).filter_by(symbol="OLD").one().status == "expired"
+    assert session.query(BuySuggestion).filter_by(symbol="NEW").one().status == "proposed"
+
+
+def test_prune_caps_to_top_n(session, monkeypatch):
+    monkeypatch.setattr(suggestions, "MAX_OPEN_PROPOSED", 2)
+    for sym, q in [("A", 100.0), ("B", 90.0), ("C", 70.0)]:
+        r = _signal(sym)
+        r.quant.score = q
+        suggestions.record_suggestion(session, r, 100.0, 5.0, 90.0)
+    session.flush()
+    suggestions.prune_proposed(session)
+    kept = {s.symbol for s in session.query(BuySuggestion).filter_by(status="proposed").all()}
+    assert kept == {"A", "B"}  # weakest (C) pruned
+    assert session.query(BuySuggestion).filter_by(symbol="C").one().status == "expired"
 
 
 def test_reactivate_rejected(session):

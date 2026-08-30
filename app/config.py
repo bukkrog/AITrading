@@ -274,6 +274,15 @@ class Settings(BaseSettings):
     # Skip orders whose notional is below this (avoids tiny, commission-heavy
     # trades). 0 = no minimum.
     min_trade_notional: float = 5000.0
+    # Skip an entry when its estimated ROUND-TRIP cost (commission both legs +
+    # slippage + FX spread when the instrument currency differs from the account)
+    # exceeds this fraction of the trade notional. This is the direct defence
+    # against the cost drag that has dominated P&L on the small SIM account.
+    # 0 = disabled. Default 2% — a trade that eats >2% just to get in and out.
+    max_roundtrip_cost_pct: float = 0.02
+    # Estimated one-way FX spread when converting the account currency into the
+    # instrument currency on a real broker (Saxo). Round-trip pays it twice.
+    fx_spread_pct: float = 0.0025  # ~0.25% each way
 
     # ---- Discovery / screener (v4) ----------------------------------
     discovery_enabled: bool = False  # auto-refresh the universe from the screen

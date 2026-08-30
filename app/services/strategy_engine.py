@@ -43,6 +43,27 @@ EXIT_QUANT_SCORE = 50.0
 _CAPACITY_MARKER = "Max open positions reached"
 
 
+def _roundtrip_cost_pct(notional: float, symbol: str, portfolio) -> float:
+    """Estimated round-trip cost as a fraction of notional: commission (both legs)
+    + slippage + FX spread (twice) when the instrument trades in a currency other
+    than the account currency on a real broker."""
+    if notional <= 0:
+        return 1.0
+    fixed = 2.0 * settings.commission_per_trade / notional
+    pct = 2.0 * settings.commission_pct
+    slip = 2.0 * settings.slippage_bps / 10000.0
+    fx = 0.0
+    try:
+        if getattr(portfolio, "saxo_active", False):
+            from app.services.market_hours import currency_for_symbol
+
+            if currency_for_symbol(symbol) != portfolio.account_currency:
+                fx = 2.0 * settings.fx_spread_pct
+    except Exception:
+        pass
+    return fixed + pct + slip + fx
+
+
 def _score_gates_pass(result: SignalResult) -> bool:
     """True if a signal cleared the quant/news SCORE gates (risk aside) — used to
     detect a strong candidate blocked only by a full book (capacity)."""
@@ -334,6 +355,14 @@ def run_cycle(
         except Exception as exc:  # never let it break the cycle
             logger.warning("armed-suggestion processing failed: %s", exc)
 
+    # Keep the proposed-suggestion backlog fresh + bounded (TTL + top-N cap).
+    try:
+        from app.services import suggestions as _suggestions
+
+        _suggestions.prune_proposed(session)
+    except Exception as exc:
+        logger.warning("suggestion prune failed: %s", exc)
+
     # ---- Entries ------------------------------------------------------
     # Regime gate (Phase 2.3): in a crisis tape, run exits but open nothing new.
     try:
@@ -429,6 +458,18 @@ def run_cycle(
                     message=f"Skipped {sym}: notional {notional:.0f} < min {settings.min_trade_notional:.0f}.",
                 )
                 continue
+            # Cost guard: don't open a trade whose round-trip cost eats too much of
+            # the notional (the dominant P&L drag on the small account).
+            if settings.max_roundtrip_cost_pct > 0:
+                rt = _roundtrip_cost_pct(notional, sym, pipe.portfolio)
+                if rt > settings.max_roundtrip_cost_pct:
+                    audit_log_service.record(
+                        session, AuditCategory.ORDER, "cost_guard_skip", symbol=sym,
+                        message=f"Skipped {sym}: est. round-trip cost {rt*100:.2f}% "
+                        f"> ceiling {settings.max_roundtrip_cost_pct*100:.1f}% "
+                        f"(notional {notional:.0f}).",
+                    )
+                    continue
             # Binary-event veto (P1.5): don't open into a known coin-flip
             # (earnings/FDA within event_veto_days) — stops can't protect gaps.
             try:

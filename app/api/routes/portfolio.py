@@ -254,6 +254,59 @@ def _saxo_closed_trades() -> list[dict]:
     return rows
 
 
+def _local_closed_trades(session: Session, base_currency: str) -> list[dict]:
+    """FIFO realized round-trips from the LOCAL fill history, converted to base
+    currency. Same shape as ``_saxo_closed_trades`` so callers are interchangeable.
+
+    Fallback for Saxo SIM, whose ``/closedpositions/me`` often returns nothing even
+    though the platform recorded the sells locally (manual closes, stop exits)."""
+    from collections import defaultdict, deque
+
+    from app.data.models import Fill
+    from app.services.currency import convert
+    from app.services.market_hours import currency_for_symbol
+
+    fills = session.scalars(select(Fill).order_by(Fill.ts.asc())).all()
+    lots: dict[str, deque] = defaultdict(deque)  # symbol -> [qty, price, comm/share]
+    out: list[dict] = []
+    for f in fills:
+        raw = str(f.symbol or "")
+        sym = raw.split(":")[0].upper()
+        side = f.side.value if hasattr(f.side, "value") else str(f.side)
+        qty = float(f.quantity or 0.0)
+        price = float(f.price or 0.0)
+        comm = float(getattr(f, "commission", 0.0) or 0.0)
+        if qty <= 0:
+            continue
+        if side.upper() == "BUY":
+            lots[sym].append([qty, price, (comm / qty) if qty else 0.0])
+            continue
+        # SELL — match FIFO against buy lots.
+        remaining, realized, buy_comm = qty, 0.0, 0.0
+        while remaining > 1e-9 and lots[sym]:
+            lot = lots[sym][0]
+            take = min(remaining, lot[0])
+            realized += take * (price - lot[1])
+            buy_comm += take * lot[2]
+            lot[0] -= take
+            remaining -= take
+            if lot[0] <= 1e-9:
+                lots[sym].popleft()
+        realized -= comm + buy_comm  # both legs' commissions
+        try:
+            ccy = currency_for_symbol(raw) or base_currency
+            realized_base = convert(realized, ccy, base_currency)
+        except Exception:
+            realized_base = realized
+        out.append({
+            "symbol": sym, "realized_pnl": float(realized_base),
+            "closed_at": (f.ts.isoformat() if f.ts else None),
+            "quantity": qty, "close_price": price,
+        })
+    out.sort(key=lambda x: x.get("closed_at") or "", reverse=True)
+    return out
+
+
 @router.get("/realized")
 def realized_by_symbol(session: Session = Depends(get_session)) -> dict:
     """Realized (closed-trade) P&L per stock — which names you actually made/lost on."""
@@ -261,10 +314,18 @@ def realized_by_symbol(session: Session = Depends(get_session)) -> dict:
     if engine.broker_mode.value == "saxo":
         from app.portfolio.engine import cached_saxo_state
 
+        st = cached_saxo_state() or {}
+        base = st.get("currency") or "EUR"
         try:
             trades = _saxo_closed_trades()
-        except Exception as exc:
-            return {"source": "saxo", "error": str(exc)[:200], "per_symbol": [], "total": 0.0}
+        except Exception:
+            trades = []
+        source = "saxo"
+        if not trades:
+            # Saxo returned no closed positions (common on SIM) — fall back to the
+            # local fill history so realized P&L is actually visible.
+            trades = _local_closed_trades(session, base)
+            source = "saxo+local"
         agg: dict[str, dict] = {}
         for t in trades:
             r = agg.setdefault(t["symbol"], {"symbol": t["symbol"], "realized_pnl": 0.0, "trades": 0})
@@ -273,7 +334,7 @@ def realized_by_symbol(session: Session = Depends(get_session)) -> dict:
         rows = sorted(agg.values(), key=lambda x: x["realized_pnl"], reverse=True)
         for x in rows:
             x["realized_pnl"] = round(x["realized_pnl"], 2)
-        return {"source": "saxo", "currency": (cached_saxo_state() or {}).get("currency"),
+        return {"source": source, "currency": base,
                 "per_symbol": rows, "total": round(sum(r["realized_pnl"] for r in rows), 2)}
     # Paper: realized P&L from the local FIFO attribution.
     positions = engine.positions()
@@ -323,17 +384,20 @@ def performance(session: Session = Depends(get_session)) -> dict:
     if engine.broker_mode.value == "saxo":
         from app.portfolio.engine import cached_saxo_state
 
+        st = cached_saxo_state() or {}
         try:
             trades = _saxo_closed_trades()
-        except Exception as exc:
-            return {"source": "saxo", "error": str(exc)[:200], "trades_today": 0,
-                    "realized": {"today": None, "week": None, "month": None}}
+        except Exception:
+            trades = []
+        source = "saxo"
+        if not trades:  # SIM often returns none — use local fills so buckets fill
+            trades = _local_closed_trades(session, st.get("currency") or "EUR")
+            source = "saxo+local"
         res = _bucket(trades)
-        st = cached_saxo_state() or {}
         from app.services.currency import rate_to_dkk
 
         dkk = rate_to_dkk(st.get("currency"))
-        res.update(source="saxo", currency=st.get("currency"),
+        res.update(source=source, currency=st.get("currency"),
                    total_value=round(st.get("total_value") or 0.0, 2),
                    dkk_rate=dkk,
                    realized_dkk={k: (round(v * dkk, 2) if v is not None else None)
